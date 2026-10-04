@@ -61,6 +61,7 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     window = MainWindow(service, environment["owner"])
     qtbot.addWidget(window)
     assert "Panel" in window.nav_buttons
+    assert "Respaldos" in window.nav_buttons
     service.create_employee(
         environment["owner"],
         full_name="Empleado Ficticio",
@@ -72,6 +73,7 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     employee_window = MainWindow(service, employee)
     qtbot.addWidget(employee_window)
     assert "Panel" not in employee_window.nav_buttons
+    assert "Respaldos" not in employee_window.nav_buttons
 
 
 def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environment) -> None:

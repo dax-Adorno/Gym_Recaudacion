@@ -32,11 +32,10 @@
 - [x] Panel del dueño con selector mes/año, métricas A–C y torta cobrado aplicado vs pendiente.
 - [x] Detalle de cuotas/pagos y exportes PDF/XLSX con saldos, descuentos, medios y anulaciones identificadas.
 - [x] Se omite el total agregado de deuda vencida (opcional); el detalle conserva saldos por cuota.
-- [ ] Respaldo SQLite consistente, restauración validada y pruebas.
+- [x] Respaldo SQLite consistente, restauración validada y pruebas.
 
 ## H5 · Recuperación y distribución
 
-- [ ] Backup SQLite consistente, restauración validada y documentación.
 - [ ] Licencia offline Ed25519, branding completo e instalador Windows.
 
 ## H6 · Cierre
