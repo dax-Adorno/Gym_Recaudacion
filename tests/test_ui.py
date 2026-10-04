@@ -4,7 +4,9 @@ from conftest import add_student
 from PySide6.QtCore import QDate, Qt
 
 from moove_recovery.application.service import GymService
+from moove_recovery.ui.dashboard_page import DashboardPage
 from moove_recovery.ui.dialogs import PaymentDialog
+from moove_recovery.ui.main_window import MainWindow
 from moove_recovery.ui.students_page import StudentsPage
 
 
@@ -22,6 +24,50 @@ def test_students_page_shows_searchable_real_service_rows(qtbot, environment) ->
     assert page.table.rowCount() == 0
     assert page.selected_id is None
     assert student_id not in page.students
+
+
+def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -> None:
+    student_id = add_student(environment)
+    service: GymService = environment["service"]
+    service.generate_missing_dues()
+    student = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )
+    fee = student["fees"][0]
+    service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+
+    page = DashboardPage(service, environment["owner"])
+    qtbot.addWidget(page)
+    assert page.received_value.text() == "$ 30.000,00"
+    assert page.applied_value.text() == "$ 30.000,00"
+    assert page.pending_value.text() == "$ 0,00"
+    assert page.empty_label.isHidden()
+
+    page.month.setCurrentIndex(10)
+    assert page.summary["period"] == "2026-11"
+    assert page.summary["due_count"] == 0
+    assert not page.empty_label.isHidden()
+
+    window = MainWindow(service, environment["owner"])
+    qtbot.addWidget(window)
+    assert "Panel" in window.nav_buttons
+    service.create_employee(
+        environment["owner"],
+        full_name="Empleado Ficticio",
+        username="empleado-sin-panel",
+        password="ClaveEmpleado-Panel",
+    )
+    employee = service.login("empleado-sin-panel", "ClaveEmpleado-Panel")
+    assert employee is not None
+    employee_window = MainWindow(service, employee)
+    qtbot.addWidget(employee_window)
+    assert "Panel" not in employee_window.nav_buttons
 
 
 def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environment) -> None:

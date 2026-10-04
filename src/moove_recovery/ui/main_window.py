@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from moove_recovery import __version__
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.models import Actor, Role
+from moove_recovery.ui.dashboard_page import DashboardPage
 from moove_recovery.ui.management_pages import PricesPage, UsersPage
 from moove_recovery.ui.students_page import StudentsPage
 
@@ -51,9 +52,12 @@ class MainWindow(QMainWindow):
         side_layout.addSpacing(22)
         side_layout.addWidget(self._side_label("OPERACIÓN"))
         self.nav_buttons: dict[str, QPushButton] = {}
+        self.page_widgets: dict[str, QWidget] = {}
         side_layout.addWidget(self._nav_button("Alumnos", "Alumnos"))
         if actor.role == Role.OWNER:
             side_layout.addSpacing(15)
+            side_layout.addWidget(self._side_label("GESTIÓN"))
+            side_layout.addWidget(self._nav_button("Panel", "Panel"))
             side_layout.addWidget(self._side_label("ADMINISTRACIÓN"))
             side_layout.addWidget(self._nav_button("Planes y precios", "Planes y precios"))
             side_layout.addWidget(self._nav_button("Usuarios", "Usuarios"))
@@ -83,12 +87,17 @@ class MainWindow(QMainWindow):
         self.students_page = StudentsPage(service, actor)
         self.students_page.changed.connect(self.refresh_pages)
         self.pages.addWidget(self.students_page)
-        self.page_indices = {"Alumnos": 0}
+        self.page_widgets["Alumnos"] = self.students_page
         if actor.role == Role.OWNER:
+            self.dashboard_page = DashboardPage(service, actor)
             self.prices_page = PricesPage(service, actor)
             self.users_page = UsersPage(service, actor)
-            self.page_indices["Planes y precios"] = self.pages.addWidget(self.prices_page)
-            self.page_indices["Usuarios"] = self.pages.addWidget(self.users_page)
+            self.page_widgets["Panel"] = self.dashboard_page
+            self.page_widgets["Planes y precios"] = self.prices_page
+            self.page_widgets["Usuarios"] = self.users_page
+            self.pages.addWidget(self.dashboard_page)
+            self.pages.addWidget(self.prices_page)
+            self.pages.addWidget(self.users_page)
         right_layout.addWidget(self.pages, 1)
         shell_layout.addWidget(right, 1)
         self.setStyleSheet(APP_STYLES)
@@ -114,25 +123,30 @@ class MainWindow(QMainWindow):
         return button
 
     def _select_page(self, page: str) -> None:
-        index = self.page_indices[page]
-        self.pages.setCurrentIndex(index)
+        self.pages.setCurrentWidget(self.page_widgets[page])
         for name, button in self.nav_buttons.items():
             button.setChecked(name == page)
         if page == "Alumnos":
             self.students_page.refresh()
+        elif page == "Panel" and hasattr(self, "dashboard_page"):
+            self.dashboard_page.refresh()
         elif page == "Planes y precios" and hasattr(self, "prices_page"):
             self.pages.removeWidget(self.prices_page)
             self.prices_page = PricesPage(self.service, self.actor)
-            self.page_indices["Planes y precios"] = self.pages.insertWidget(1, self.prices_page)
+            self.page_widgets["Planes y precios"] = self.prices_page
+            self.pages.addWidget(self.prices_page)
             self.pages.setCurrentWidget(self.prices_page)
         elif page == "Usuarios" and hasattr(self, "users_page"):
             self.pages.removeWidget(self.users_page)
             self.users_page = UsersPage(self.service, self.actor)
-            self.page_indices["Usuarios"] = self.pages.insertWidget(2, self.users_page)
+            self.page_widgets["Usuarios"] = self.users_page
+            self.pages.addWidget(self.users_page)
             self.pages.setCurrentWidget(self.users_page)
 
     def refresh_pages(self) -> None:
         self.students_page.refresh()
+        if hasattr(self, "dashboard_page"):
+            self.dashboard_page.refresh()
 
     def refresh_if_day_changed(self) -> None:
         today = self.service.today()
@@ -165,6 +179,7 @@ QLabel#muted { color: #85918a; font-size: 10px; }
 QLabel#pageTitle { color: #24332b; font-size: 20px; font-weight: 700; }
 QLabel#detailTitle { color: #24332b; font-size: 15px; font-weight: 700; }
 QLabel#sectionTitle { color: #31433a; font-size: 12px; font-weight: 700; }
+QLabel#kpiValue { color: #19384a; font-size: 16px; font-weight: 700; }
 QFrame#detailPanel { background: #fbfcfb; border: 1px solid #e5eae6; border-radius: 5px; }
 QLineEdit, QComboBox, QDateEdit, QTextEdit, QListWidget { background: #ffffff; border: 1px solid #dfe6e1; border-radius: 4px; padding: 6px 8px; selection-background-color: #d9ebe0; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus { border: 1px solid #5a9876; }
