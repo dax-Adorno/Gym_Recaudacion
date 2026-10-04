@@ -1,0 +1,9 @@
+# Plan de pruebas H1 y H2
+
+- Reglas puras de vencimiento, ventana de aviso, alta día 20/21, alta posterior al vencimiento, inactividad y estados.
+- Persistencia SQLite real en base temporal, claves foráneas, migración repetida e idempotencia de cuotas.
+- Inicialización segura del dueño, verificación de contraseña y bloqueo de segundo administrador.
+- Autorización por servicio para precios, baja, anulaciones e informes globales.
+- Búsqueda parcial sin distinguir mayúsculas ni tildes, incluyendo `%` y `_` literales; DNI duplicado activo/inactivo.
+- Cobro de cuotas completas, adelantos identificados por período, reintentos, rollback y método de pago.
+- Inspección manual pendiente de UI Qt y flujo con mouse/teclado; estos tests no acreditan empaquetado Windows.
