@@ -632,20 +632,59 @@ class GymService:
         rows = self.db.fetch_all(
             "SELECT 'cuota' AS kind, d.id AS id, d.period AS date, d.amount_cents AS amount_cents, "
             "d.due_date AS detail, d.discount_source AS extra, "
-            "COALESCE(SUM(CASE WHEN p.status = 'valid' THEN pd.amount_cents ELSE 0 END), 0) AS paid_cents "
+            "COALESCE(SUM(CASE WHEN p.status = 'valid' THEN pd.amount_cents ELSE 0 END), 0) AS paid_cents, "
+            "NULL AS void_reason "
             "FROM dues d LEFT JOIN payment_dues pd ON pd.due_id = d.id "
             "LEFT JOIN payments p ON p.id = pd.payment_id WHERE d.student_id = ? GROUP BY d.id "
             "UNION ALL "
-            "SELECT DISTINCT 'pago', p.id, p.paid_at, p.total_cents, p.method, p.status, 0 "
+            "SELECT DISTINCT 'pago', p.id, p.paid_at, p.total_cents, p.method, p.status, 0, p.void_reason "
             "FROM payments p JOIN payment_dues pd ON pd.payment_id = p.id "
             "JOIN dues d ON d.id = pd.due_id WHERE d.student_id = ? "
             "UNION ALL "
-            "SELECT 'movimiento', h.id, h.event_date, 0, h.event_type, h.payload, 0 "
+            "SELECT 'movimiento', h.id, h.event_date, 0, h.event_type, h.payload, 0, NULL "
             "FROM student_history h WHERE h.student_id = ? "
             "ORDER BY date DESC, id DESC",
             (student_id, student_id, student_id),
         )
         return [dict(row) for row in rows]
+
+    def void_payment(self, actor: Actor, payment_id: int, reason: str) -> None:
+        self._require_owner(actor)
+        reason = " ".join(reason.split())
+        if not reason:
+            raise ValidationError("Indica el motivo de la anulación.")
+        if len(reason) > 500:
+            raise ValidationError("El motivo no puede superar los 500 caracteres.")
+        now_text = self.now().isoformat(timespec="seconds")
+        with self.db.transaction() as connection:
+            payment = connection.execute(
+                "SELECT status FROM payments WHERE id = ?", (payment_id,)
+            ).fetchone()
+            if payment is None:
+                raise DomainError("No se encontró el cobro seleccionado.")
+            if payment["status"] != "valid":
+                raise DomainError("Este cobro ya fue anulado.")
+            due_ids = [
+                int(row[0])
+                for row in connection.execute(
+                    "SELECT due_id FROM payment_dues WHERE payment_id = ? ORDER BY due_id",
+                    (payment_id,),
+                ).fetchall()
+            ]
+            connection.execute(
+                "UPDATE payments SET status = 'voided', void_reason = ? "
+                "WHERE id = ? AND status = 'valid'",
+                (reason, payment_id),
+            )
+            self._audit(
+                connection,
+                actor.id,
+                "cobro_anulado",
+                "payments",
+                payment_id,
+                {"reason": reason, "due_ids": due_ids},
+                now_text,
+            )
 
     def _require_owner(self, actor: Actor) -> None:
         if actor.role != Role.OWNER:

@@ -27,6 +27,13 @@
 - Si dueño y empleado usan la misma cuenta de Windows.
 - Recuperación del acceso del dueño y comprobación de reembolsos reales.
 
+## H3 · Anulación de cobros
+
+- La anulación la puede registrar únicamente el dueño y requiere un motivo.
+- Se conserva el cobro original y sus períodos; el estado anulado excluye el importe del saldo pagado.
+- La auditoría conserva quién y cuándo anuló, el motivo y las cuotas afectadas.
+- Anular el registro no afirma que se haya realizado una devolución de dinero.
+
 ## Distribución
 
 PySide6 se distribuye bajo LGPLv3/GPLv3 o licencia comercial de Qt. Antes de crear un instalador se revisarán las condiciones de distribución de Qt y las licencias de las dependencias incluidas.
