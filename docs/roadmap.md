@@ -23,7 +23,7 @@
 ## H3 · Operación avanzada
 
 - [x] Anulación auditada de pagos: dueño, motivo, reversión transaccional e historial conservado.
-- [ ] Adelantos identificados por período futuro.
+- [x] Adelantos: preparación idempotente de cuotas futuras y cobro asociado a períodos seleccionados.
 - [ ] Promociones trimestrales configurables por dueño, después de acordar elegibilidad y vigencia.
 - [ ] Resolver previamente política de cambio de plan, baja con adelantos y prioridad de deuda.
 

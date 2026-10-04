@@ -1,7 +1,7 @@
 from datetime import date
 
 from conftest import add_student
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 
 from moove_recovery.application.service import GymService
 from moove_recovery.ui.dialogs import PaymentDialog
@@ -40,6 +40,31 @@ def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environmen
     item.setCheckState(Qt.CheckState.Unchecked)
     assert dialog.total.text() == "$ 0,00"
     assert not dialog.submit.isEnabled()
+
+
+def test_payment_dialog_loads_future_periods_without_losing_selection(qtbot, environment) -> None:
+    student_id = add_student(environment)
+    service: GymService = environment["service"]
+    service.generate_missing_dues()
+    student = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )
+    dialog = PaymentDialog(service, environment["owner"], student)
+    qtbot.addWidget(dialog)
+
+    current_item = dialog.dues.item(0)
+    current_item.setCheckState(Qt.CheckState.Checked)
+    dialog.through_month.setDate(QDate(2027, 1, 18))
+    dialog.load_dues_button.click()
+
+    periods = {
+        str(dialog.dues.item(index).data(Qt.ItemDataRole.UserRole + 2)): dialog.dues.item(index)
+        for index in range(dialog.dues.count())
+    }
+    assert set(periods) == {"2026-10", "2026-11", "2026-12", "2027-01"}
+    assert periods["2026-10"].checkState() == Qt.CheckState.Checked
+    periods["2027-01"].setCheckState(Qt.CheckState.Checked)
+    assert dialog.total.text() == "$ 60.000,00"
 
 
 def test_void_payment_action_is_owner_only_and_selects_valid_payments(qtbot, environment) -> None:
