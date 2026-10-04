@@ -40,3 +40,47 @@ def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environmen
     item.setCheckState(Qt.CheckState.Unchecked)
     assert dialog.total.text() == "$ 0,00"
     assert not dialog.submit.isEnabled()
+
+
+def test_void_payment_action_is_owner_only_and_selects_valid_payments(qtbot, environment) -> None:
+    student_id = add_student(environment)
+    service: GymService = environment["service"]
+    service.generate_missing_dues()
+    student = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )
+    fee = student["fees"][0]
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+    page = StudentsPage(service, environment["owner"])
+    qtbot.addWidget(page)
+    assert not page.void_payment_button.isHidden()
+    page.history_table.selectRow(0)
+    assert page.void_payment_button.isEnabled()
+    service.void_payment(environment["owner"], payment_id, "Prueba de anulación")
+    page.refresh()
+    payment_row = next(
+        row
+        for row in range(page.history_table.rowCount())
+        if page.history_table.item(row, 1).data(Qt.ItemDataRole.UserRole) == payment_id
+    )
+    page.history_table.selectRow(payment_row)
+    assert not page.void_payment_button.isEnabled()
+
+    employee_service = GymService(service.db, today=service.today, now=service.now)
+    employee_service.create_employee(
+        environment["owner"],
+        full_name="Empleado Ficticio",
+        username="empleado-ui",
+        password="ClaveEmpleado-2026",
+    )
+    employee = employee_service.login("empleado-ui", "ClaveEmpleado-2026")
+    assert employee is not None
+    employee_page = StudentsPage(employee_service, employee)
+    qtbot.addWidget(employee_page)
+    assert employee_page.void_payment_button.isHidden()

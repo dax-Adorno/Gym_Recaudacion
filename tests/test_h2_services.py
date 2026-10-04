@@ -5,6 +5,7 @@ from conftest import add_student
 
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.errors import (
+    DomainError,
     DuplicatePayment,
     DuplicateStudent,
     PermissionDenied,
@@ -210,6 +211,106 @@ def test_reusing_payment_key_for_different_operation_is_rejected(environment) ->
             method="transferencia",
             idempotency_key="same-key",
         )
+
+
+def test_void_payment_reopens_due_and_preserves_reason_and_audit(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    fee = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"][0]
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+
+    service.void_payment(environment["owner"], payment_id, "  Cobro   duplicado  ")
+
+    payment = environment["db"].fetch_one(
+        "SELECT status, void_reason FROM payments WHERE id = ?", (payment_id,)
+    )
+    assert payment["status"] == "voided"
+    assert payment["void_reason"] == "Cobro duplicado"
+    assert environment["db"].fetch_one("SELECT COUNT(*) FROM payment_dues")[0] == 1
+    history = service.list_student_history(environment["owner"], student_id)
+    payment_history = next(row for row in history if row["kind"] == "pago")
+    assert payment_history["void_reason"] == "Cobro duplicado"
+    audit = environment["db"].fetch_one(
+        "SELECT actor_id, action, details, created_at FROM audit_log "
+        "WHERE entity_type = 'payments' AND entity_id = ? AND action = 'cobro_anulado'",
+        (payment_id,),
+    )
+    assert audit["actor_id"] == environment["owner"].id
+    assert audit["action"] == "cobro_anulado"
+    assert '"reason": "Cobro duplicado"' in audit["details"]
+    assert audit["created_at"].startswith("2026-10-03T12:00:00")
+    refreshed_fee = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"][0]
+    assert refreshed_fee["outstanding_cents"] == fee["amount_cents"]
+
+
+def test_void_payment_is_owner_only_and_requires_a_reason(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    fee = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"][0]
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+    service.create_employee(
+        environment["owner"],
+        full_name="Empleado Ficticio",
+        username="empleado-void",
+        password="ClaveEmpleado-2026",
+    )
+    employee = service.login("empleado-void", "ClaveEmpleado-2026")
+    assert employee is not None
+
+    with pytest.raises(PermissionDenied):
+        service.void_payment(employee, payment_id, "Intento no autorizado")
+    with pytest.raises(ValidationError, match="motivo"):
+        service.void_payment(environment["owner"], payment_id, "  \n  ")
+    assert (
+        environment["db"].fetch_one("SELECT status FROM payments WHERE id = ?", (payment_id,))[0]
+        == "valid"
+    )
+
+
+def test_payment_cannot_be_voided_twice(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    fee = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"][0]
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+    service.void_payment(environment["owner"], payment_id, "Error de registro")
+
+    with pytest.raises(DomainError, match="ya fue anulado"):
+        service.void_payment(environment["owner"], payment_id, "Segundo intento")
+    assert (
+        environment["db"].fetch_one(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'cobro_anulado'"
+        )[0]
+        == 1
+    )
 
 
 def test_price_change_does_not_rewrite_generated_month(environment) -> None:

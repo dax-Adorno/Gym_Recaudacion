@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -145,10 +146,20 @@ class StudentsPage(QWidget):
         self.history_table = QTableWidget(0, 4)
         self.history_table.setHorizontalHeaderLabels(["FECHA", "MOVIMIENTO", "DETALLE", "IMPORTE"])
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.history_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.history_table.verticalHeader().setVisible(False)
         self.history_table.horizontalHeader().setStretchLastSection(True)
+        self.history_table.itemSelectionChanged.connect(self.sync_void_button)
         history_layout.addWidget(self.history_table)
+        self.void_payment_button = QPushButton("Anular cobro seleccionado")
+        self.void_payment_button.setObjectName("secondaryButton")
+        self.void_payment_button.setToolTip(
+            "Revierte la aplicación de un cobro; no confirma una devolución de dinero."
+        )
+        self.void_payment_button.setEnabled(False)
+        self.void_payment_button.clicked.connect(self.void_selected_payment)
+        history_layout.addWidget(self.void_payment_button)
         self.detail_tabs.addTab(fee_page, "Cuotas")
         self.detail_tabs.addTab(history_page, "Historial")
         details_layout.addWidget(self.detail_tabs, 1)
@@ -187,6 +198,7 @@ class StudentsPage(QWidget):
             self.edit_button.hide()
             self.deactivate_button.hide()
             self.reactivate_button.hide()
+            self.void_payment_button.hide()
         self.show_selected()
 
     def clear_filters(self) -> None:
@@ -298,7 +310,11 @@ class StudentsPage(QWidget):
             elif kind == "pago":
                 shown_date = str(movement["date"])[:10]
                 description = "Cobro"
-                detail = f"{movement['detail']} · {movement['extra']}"
+                status = str(movement["extra"])
+                detail = f"{movement['detail']} · Válido"
+                if status == "voided":
+                    description = "Cobro anulado"
+                    detail = f"{movement['detail']} · {movement['void_reason']} · Sin confirmar devolución"
                 amount = format_money(int(movement["amount_cents"]))
             else:
                 shown_date = date.fromisoformat(str(movement["date"])).strftime("%d/%m/%Y")
@@ -306,7 +322,12 @@ class StudentsPage(QWidget):
                 detail = "Movimiento de cuenta"
                 amount = "—"
             for column, value in enumerate((shown_date, description, detail, amount)):
-                self.history_table.setItem(row, column, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if kind == "pago" and column == 1:
+                    item.setData(Qt.ItemDataRole.UserRole, int(movement["id"]))
+                    item.setData(Qt.ItemDataRole.UserRole + 1, status)
+                self.history_table.setItem(row, column, item)
+        self.sync_void_button()
         self.notes.setText(
             f"Observaciones: {student['notes']}" if student["notes"] else "Sin observaciones"
         )
@@ -336,11 +357,57 @@ class StudentsPage(QWidget):
             label.setText("—")
         self.fee_table.setRowCount(0)
         self.history_table.setRowCount(0)
+        self.void_payment_button.setEnabled(False)
         self.notes.setText("")
         self.pay_button.setEnabled(False)
         self.edit_button.setEnabled(False)
         self.deactivate_button.setVisible(False)
         self.reactivate_button.setVisible(False)
+
+    def sync_void_button(self) -> None:
+        selected = self.history_table.selectedItems()
+        if self.actor.role != Role.OWNER or not selected:
+            self.void_payment_button.setEnabled(False)
+            return
+        payment_item = self.history_table.item(selected[0].row(), 1)
+        self.void_payment_button.setEnabled(
+            payment_item.data(Qt.ItemDataRole.UserRole) is not None
+            and payment_item.data(Qt.ItemDataRole.UserRole + 1) == "valid"
+        )
+
+    def void_selected_payment(self) -> None:
+        selected = self.history_table.selectedItems()
+        if self.selected_id is None or not selected or self.actor.role != Role.OWNER:
+            return
+        payment_item = self.history_table.item(selected[0].row(), 1)
+        payment_id = payment_item.data(Qt.ItemDataRole.UserRole)
+        if payment_id is None or payment_item.data(Qt.ItemDataRole.UserRole + 1) != "valid":
+            return
+        reason, accepted = QInputDialog.getMultiLineText(
+            self, "Motivo de anulación", "Motivo (obligatorio):"
+        )
+        if not accepted:
+            return
+        if not reason.strip():
+            QMessageBox.warning(self, "Motivo requerido", "Indica el motivo de la anulación.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "Confirmar anulación",
+            "Se conservará el registro y se reabrirán sus cuotas. Esta acción no confirma una "
+            "devolución de dinero. ¿Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.service.void_payment(self.actor, int(payment_id), reason)
+        except DomainError as error:
+            QMessageBox.warning(self, "No se pudo anular", str(error))
+            return
+        self.changed.emit()
+        self.refresh()
 
     def add_student(self) -> None:
         dialog = StudentDialog(self.service, self.actor)

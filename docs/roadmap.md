@@ -22,7 +22,9 @@
 
 ## H3 · Operación avanzada
 
-- [ ] Adelantos, promociones trimestrales y anulación auditada de pagos.
+- [x] Anulación auditada de pagos: dueño, motivo, reversión transaccional e historial conservado.
+- [ ] Adelantos identificados por período futuro.
+- [ ] Promociones trimestrales configurables por dueño, después de acordar elegibilidad y vigencia.
 - [ ] Resolver previamente política de cambio de plan, baja con adelantos y prioridad de deuda.
 
 ## H4 · Panel e informes
