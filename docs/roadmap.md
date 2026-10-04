@@ -29,7 +29,9 @@
 
 ## H4 · Panel e informes
 
-- [ ] Métricas separadas por fecha de cobro y periodo de cuota; PDF y XLSX.
+- [x] Panel del dueño con selector mes/año, métricas A–C y torta cobrado aplicado vs pendiente.
+- [ ] Detalle de cuotas/pagos y exportes PDF/XLSX; deuda vencida total si corresponde.
+- [ ] Respaldo SQLite consistente, restauración validada y pruebas.
 
 ## H5 · Recuperación y distribución
 

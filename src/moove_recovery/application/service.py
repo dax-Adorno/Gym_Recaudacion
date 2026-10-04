@@ -162,6 +162,44 @@ class GymService:
         )
         return [dict(row) for row in rows]
 
+    def get_dashboard_summary(self, actor: Actor, year: int, month: int) -> dict[str, object]:
+        self._require_owner(actor)
+        if not 1 <= year <= 9999 or not 1 <= month <= 12:
+            raise ValidationError("Selecciona un mes y año válidos.")
+
+        period = f"{year:04d}-{month:02d}"
+        received = self.db.fetch_one(
+            "SELECT COALESCE(SUM(total_cents), 0) FROM payments "
+            "WHERE status = 'valid' AND substr(paid_at, 1, 7) = ?",
+            (period,),
+        )
+        applied = self.db.fetch_one(
+            "SELECT COALESCE(SUM(pd.amount_cents), 0) "
+            "FROM payment_dues pd JOIN payments p ON p.id = pd.payment_id "
+            "JOIN dues d ON d.id = pd.due_id "
+            "WHERE p.status = 'valid' AND d.period = ?",
+            (period,),
+        )
+        dues = self.db.fetch_one(
+            "SELECT COUNT(*), COALESCE(SUM(d.amount_cents), 0), "
+            "COALESCE(SUM(MAX(0, d.amount_cents - COALESCE(paid.paid_cents, 0))), 0) "
+            "FROM dues d LEFT JOIN ("
+            "SELECT pd.due_id, SUM(pd.amount_cents) AS paid_cents "
+            "FROM payment_dues pd JOIN payments p ON p.id = pd.payment_id "
+            "WHERE p.status = 'valid' GROUP BY pd.due_id"
+            ") paid ON paid.due_id = d.id WHERE d.period = ?",
+            (period,),
+        )
+        return {
+            "period": period,
+            "cutoff_date": self.today().isoformat(),
+            "received_cents": int(received[0]) if received else 0,
+            "applied_cents": int(applied[0]) if applied else 0,
+            "pending_cents": int(dues[2]) if dues else 0,
+            "period_total_cents": int(dues[1]) if dues else 0,
+            "due_count": int(dues[0]) if dues else 0,
+        }
+
     def available_plans(self) -> list[dict[str, object]]:
         rows = self.db.fetch_all(
             "SELECT id, code, sessions_per_week FROM plans WHERE active = 1 ORDER BY sessions_per_week"

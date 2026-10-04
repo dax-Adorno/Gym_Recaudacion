@@ -91,6 +91,73 @@ def test_future_dues_cannot_be_generated_for_inactive_student(environment) -> No
         service.prepare_future_dues(environment["owner"], student_id, date(2026, 9, 1))
 
 
+def test_dashboard_separates_cash_month_from_covered_periods(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    service.prepare_future_dues(environment["owner"], student_id, date(2027, 1, 1))
+    fees = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"]
+    future_fee_ids = [
+        fee["id"] for fee in fees if fee["period"] in {"2026-11", "2026-12", "2027-01"}
+    ]
+
+    service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=future_fee_ids,
+        total_cents=9_000_000,
+        method="transferencia",
+    )
+
+    october = service.get_dashboard_summary(environment["owner"], 2026, 10)
+    november = service.get_dashboard_summary(environment["owner"], 2026, 11)
+    assert october["received_cents"] == 9_000_000
+    assert october["applied_cents"] == 0
+    assert october["pending_cents"] == 3_000_000
+    assert october["period_total_cents"] == 3_000_000
+    assert november["received_cents"] == 0
+    assert november["applied_cents"] == 3_000_000
+    assert november["pending_cents"] == 0
+
+
+def test_dashboard_excludes_voided_payments_and_requires_owner(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    fee = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )["fees"][0]
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+    service.void_payment(environment["owner"], payment_id, "Error de carga")
+
+    summary = service.get_dashboard_summary(environment["owner"], 2026, 10)
+    assert summary["received_cents"] == 0
+    assert summary["applied_cents"] == 0
+    assert summary["pending_cents"] == fee["amount_cents"]
+    assert summary["period_total_cents"] == fee["amount_cents"]
+
+    service.create_employee(
+        environment["owner"],
+        full_name="Empleado Ficticio",
+        username="empleado-panel",
+        password="ClaveEmpleado-Panel",
+    )
+    employee = service.login("empleado-panel", "ClaveEmpleado-Panel")
+    assert employee is not None
+    with pytest.raises(PermissionDenied):
+        service.get_dashboard_summary(employee, 2026, 10)
+    with pytest.raises(ValidationError):
+        service.get_dashboard_summary(environment["owner"], 2026, 13)
+
+
 def test_late_enrollment_gets_one_half_price_first_month(environment) -> None:
     clock = environment["clock"]
     clock.current = date(2026, 10, 25)
