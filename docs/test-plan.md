@@ -8,4 +8,5 @@
 - Búsqueda parcial sin distinguir mayúsculas ni tildes, incluyendo `%` y `_` literales; DNI duplicado activo/inactivo.
 - Cobro de cuotas completas, adelantos identificados por período, reintentos, rollback y método de pago.
 - Panel: ingreso por fecha de cobro separado de aplicación por período de cuota, pendientes, anulaciones excluidas y acceso solo del dueño.
+- Informes PDF/XLSX: conciliación de importes, cuotas sin datos, descuentos, medios, anulaciones y DNI/teléfono como texto; textos que parecen fórmulas no se ejecutan.
 - Inspección manual pendiente de UI Qt y flujo con mouse/teclado; estos tests no acreditan empaquetado Windows.

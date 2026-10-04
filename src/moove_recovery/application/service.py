@@ -200,6 +200,50 @@ class GymService:
             "due_count": int(dues[0]) if dues else 0,
         }
 
+    def get_monthly_report(self, actor: Actor, year: int, month: int) -> dict[str, object]:
+        self._require_owner(actor)
+        summary = self.get_dashboard_summary(actor, year, month)
+        period = str(summary["period"])
+        due_rows = self.db.fetch_all(
+            "SELECT d.id, s.first_name || ' ' || s.last_name AS student_name, s.dni, s.phone, s.active, "
+            "d.period, d.due_date, d.base_cents, d.discount_cents, d.discount_source, d.amount_cents, "
+            "COALESCE((SELECT SUM(pd.amount_cents) FROM payment_dues pd "
+            "JOIN payments p ON p.id = pd.payment_id "
+            "WHERE pd.due_id = d.id AND p.status = 'valid'), 0) AS paid_cents "
+            "FROM dues d JOIN students s ON s.id = d.student_id "
+            "WHERE d.period = ? ORDER BY s.last_name_normalized, s.first_name_normalized",
+            (period,),
+        )
+        payment_rows = self.db.fetch_all(
+            "SELECT DISTINCT p.id, p.paid_at, p.total_cents, p.method, p.reference, p.status, "
+            "p.void_reason, u.full_name AS created_by, "
+            "(SELECT group_concat(period, ', ') FROM (SELECT DISTINCT d.period AS period "
+            "FROM payment_dues pd JOIN dues d ON d.id = pd.due_id "
+            "WHERE pd.payment_id = p.id ORDER BY d.period)) AS periods "
+            "FROM payments p JOIN users u ON u.id = p.created_by "
+            "WHERE substr(p.paid_at, 1, 7) = ? OR EXISTS ("
+            "SELECT 1 FROM payment_dues pd JOIN dues d ON d.id = pd.due_id "
+            "WHERE pd.payment_id = p.id AND d.period = ?) "
+            "ORDER BY p.paid_at, p.id",
+            (period, period),
+        )
+        dues = [
+            {
+                **dict(row),
+                "paid_cents": int(row["paid_cents"]),
+                "outstanding_cents": max(0, int(row["amount_cents"]) - int(row["paid_cents"])),
+            }
+            for row in due_rows
+        ]
+        payments = [
+            {
+                **dict(row),
+                "paid_in_month": str(row["paid_at"])[:7] == period,
+            }
+            for row in payment_rows
+        ]
+        return {"summary": summary, "dues": dues, "payments": payments}
+
     def available_plans(self) -> list[dict[str, object]]:
         rows = self.db.fetch_all(
             "SELECT id, code, sessions_per_week FROM plans WHERE active = 1 ORDER BY sessions_per_week"
