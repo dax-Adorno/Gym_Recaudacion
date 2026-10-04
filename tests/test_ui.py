@@ -47,6 +47,10 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     assert page.received_value.text() == "$ 30.000,00"
     assert page.applied_value.text() == "$ 30.000,00"
     assert page.pending_value.text() == "$ 0,00"
+    assert page.dues_table.rowCount() == 1
+    assert page.payments_table.rowCount() == 1
+    assert page.export_pdf_button.isEnabled()
+    assert page.export_xlsx_button.isEnabled()
     assert page.empty_label.isHidden()
 
     page.month.setCurrentIndex(10)

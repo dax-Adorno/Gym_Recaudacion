@@ -13,6 +13,7 @@
 - Dueño y empleados comparten la base bajo un único perfil de Windows; usar perfiles distintos daría bases locales separadas.
 - Se usa Argon2id con los parámetros predeterminados de `argon2-cffi`; el hash codifica sal y parámetros para permitir futuras verificaciones.
 - PySide6 6.11.2 es la versión estable fijada para desarrollo y entrega inicial.
+- Exportes: ReportLab 5.0.1 para PDF (BSD) y openpyxl 3.1.5 para XLSX (MIT); importes del libro se almacenan como celdas numéricas y DNI/teléfono como texto.
 - Los intervalos de membresía se auditan; la reactivación queda bloqueada hasta definir su política de cuota.
 
 ## Pendiente de decisión del dueño

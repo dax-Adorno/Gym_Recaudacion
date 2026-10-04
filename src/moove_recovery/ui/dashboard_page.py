@@ -1,21 +1,32 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.models import Actor
+from moove_recovery.infrastructure.reports import (
+    export_monthly_report_pdf,
+    export_monthly_report_xlsx,
+)
 from moove_recovery.ui.common import format_money, make_label
 
 MONTHS = (
@@ -80,6 +91,7 @@ class DashboardPage(QWidget):
         self.service = service
         self.actor = actor
         self.summary: dict[str, object] = {}
+        self.report: dict[str, object] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(26, 24, 26, 24)
         layout.setSpacing(16)
@@ -101,14 +113,24 @@ class DashboardPage(QWidget):
         period_controls.addWidget(self.month)
         period_controls.addWidget(self.year)
         period_controls.addStretch(1)
+        self.export_pdf_button = QPushButton("Exportar PDF")
+        self.export_xlsx_button = QPushButton("Exportar Excel")
+        self.export_pdf_button.clicked.connect(self.export_pdf)
+        self.export_xlsx_button.clicked.connect(self.export_xlsx)
+        period_controls.addWidget(self.export_pdf_button)
+        period_controls.addWidget(self.export_xlsx_button)
         layout.addLayout(period_controls)
 
+        self.views = QTabWidget()
+        overview = QWidget()
+        overview_layout = QVBoxLayout(overview)
+        overview_layout.setContentsMargins(0, 12, 0, 0)
         metrics = QHBoxLayout()
         metrics.setSpacing(10)
         self.received_value = self._metric(metrics, "Recibido en el mes")
         self.applied_value = self._metric(metrics, "Aplicado a cuotas del período")
         self.pending_value = self._metric(metrics, "Pendiente del período")
-        layout.addLayout(metrics)
+        overview_layout.addLayout(metrics)
 
         breakdown = QHBoxLayout()
         breakdown.setSpacing(22)
@@ -129,11 +151,46 @@ class DashboardPage(QWidget):
         legend.addWidget(self.total_legend)
         legend.addStretch(1)
         breakdown.addLayout(legend, 1)
-        layout.addLayout(breakdown, 1)
+        overview_layout.addLayout(breakdown, 1)
         self.empty_label = make_label("Sin cuotas registradas", "muted")
-        layout.addWidget(self.empty_label)
+        overview_layout.addWidget(self.empty_label)
         self.cutoff_label = make_label("")
-        layout.addWidget(self.cutoff_label)
+        overview_layout.addWidget(self.cutoff_label)
+
+        detail_tabs = QTabWidget()
+        self.dues_table = self._table(
+            [
+                "ALUMNO",
+                "DNI",
+                "TELÉFONO",
+                "ESTADO",
+                "VENCE",
+                "BASE",
+                "DESCUENTO",
+                "ORIGEN",
+                "CUOTA",
+                "PAGADO",
+                "SALDO",
+            ]
+        )
+        self.payments_table = self._table(
+            [
+                "FECHA",
+                "IMPORTE",
+                "MEDIO",
+                "PERÍODOS",
+                "REGISTRADO POR",
+                "ESTADO",
+                "ANULACIÓN",
+                "REFERENCIA",
+                "PAGO EN MES",
+            ]
+        )
+        detail_tabs.addTab(self.dues_table, "Cuotas")
+        detail_tabs.addTab(self.payments_table, "Cobros")
+        self.views.addTab(overview, "Resumen")
+        self.views.addTab(detail_tabs, "Detalle")
+        layout.addWidget(self.views, 1)
 
         self.month.currentIndexChanged.connect(self.refresh)
         self.year.valueChanged.connect(self.refresh)
@@ -151,10 +208,25 @@ class DashboardPage(QWidget):
         layout.addWidget(frame, 1)
         return value
 
+    @staticmethod
+    def _table(headers: list[str]) -> QTableWidget:
+        table = QTableWidget(0, len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.horizontalHeader().setStretchLastSection(True)
+        return table
+
     def refresh(self, *_args: object) -> None:
-        summary = self.service.get_dashboard_summary(
+        report = self.service.get_monthly_report(
             self.actor, self.year.value(), int(self.month.currentData())
         )
+        self.report = report
+        summary = report["summary"]
+        if not isinstance(summary, dict):
+            raise RuntimeError("El resumen del informe no es válido.")
         self.summary = summary
         applied = int(summary["applied_cents"])
         pending = int(summary["pending_cents"])
@@ -174,4 +246,97 @@ class DashboardPage(QWidget):
         cutoff = date.fromisoformat(str(summary["cutoff_date"]))
         self.cutoff_label.setText(
             f"Corte: {cutoff.strftime('%d/%m/%Y')} · estado actual del período"
+        )
+        self._populate_tables(report)
+
+    def _populate_tables(self, report: dict[str, object]) -> None:
+        dues = report["dues"]
+        payments = report["payments"]
+        if not isinstance(dues, list) or not isinstance(payments, list):
+            raise RuntimeError("El detalle del informe no es válido.")
+        self.dues_table.setRowCount(len(dues))
+        for row_index, fee in enumerate(dues):
+            values = (
+                str(fee["student_name"]),
+                str(fee["dni"]),
+                str(fee["phone"]),
+                "Activo" if fee["active"] else "Inactivo",
+                date.fromisoformat(str(fee["due_date"])).strftime("%d/%m/%Y"),
+                format_money(int(fee["base_cents"])),
+                format_money(int(fee["discount_cents"])),
+                self._discount_label(fee["discount_source"]),
+                format_money(int(fee["amount_cents"])),
+                format_money(int(fee["paid_cents"])),
+                format_money(int(fee["outstanding_cents"])),
+            )
+            self._set_row(self.dues_table, row_index, values)
+
+        self.payments_table.setRowCount(len(payments))
+        for row_index, payment in enumerate(payments):
+            values = (
+                str(payment["paid_at"]).replace("T", " ")[:16],
+                format_money(int(payment["total_cents"])),
+                self._payment_method(payment["method"]),
+                str(payment["periods"] or ""),
+                str(payment["created_by"]),
+                "Anulado" if payment["status"] == "voided" else "Válido",
+                str(payment["void_reason"] or ""),
+                str(payment["reference"] or ""),
+                "Sí" if payment["paid_in_month"] else "No",
+            )
+            self._set_row(self.payments_table, row_index, values)
+
+    @staticmethod
+    def _set_row(table: QTableWidget, row: int, values: tuple[str, ...]) -> None:
+        for column, value in enumerate(values):
+            table.setItem(row, column, QTableWidgetItem(value))
+
+    @staticmethod
+    def _discount_label(value: object) -> str:
+        if not value:
+            return "Sin descuento"
+        return "Alta 50 %" if value == "alta_50" else str(value)
+
+    @staticmethod
+    def _payment_method(value: object) -> str:
+        labels = {
+            "efectivo": "Efectivo",
+            "transferencia": "Transferencia",
+            "debito": "Débito",
+            "credito": "Crédito",
+            "otro": "Otro",
+        }
+        return labels.get(str(value), str(value))
+
+    def export_pdf(self) -> None:
+        self._export("pdf")
+
+    def export_xlsx(self) -> None:
+        self._export("xlsx")
+
+    def _export(self, file_type: str) -> None:
+        extension = ".pdf" if file_type == "pdf" else ".xlsx"
+        file_filter = "Documento PDF (*.pdf)" if file_type == "pdf" else "Libro Excel (*.xlsx)"
+        period = str(self.summary["period"])
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar informe",
+            f"MOOVE_RECOVERY_{period}{extension}",
+            file_filter,
+        )
+        if not path:
+            return
+        destination = Path(path)
+        if destination.suffix.lower() != extension:
+            destination = destination.with_suffix(extension)
+        try:
+            exporter = (
+                export_monthly_report_pdf if file_type == "pdf" else export_monthly_report_xlsx
+            )
+            exporter(self.report, destination)
+        except Exception as error:
+            QMessageBox.warning(self, "No se pudo exportar el informe", str(error))
+            return
+        QMessageBox.information(
+            self, "Informe exportado", f"Se guardó el informe en:\n{destination}"
         )
