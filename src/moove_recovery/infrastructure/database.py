@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
+from uuid import uuid4
 
 SCHEMA_VERSION = 1
 
@@ -138,10 +141,19 @@ class Database:
         return connection
 
     def migrate(self) -> None:
-        with self.connect() as connection:
+        connection = self.connect()
+        try:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
                 raise RuntimeError("La base de datos fue creada por una versión más nueva.")
+            if 0 < version < SCHEMA_VERSION:
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                backup = (
+                    self.path.parent
+                    / "backups"
+                    / f"pre-migration-{stamp}-{uuid4().hex[:8]}.sqlite3"
+                )
+                self.backup_to(backup)
             if version < 1:
                 try:
                     connection.executescript(
@@ -150,6 +162,36 @@ class Database:
                 except Exception:
                     connection.rollback()
                     raise
+        finally:
+            connection.close()
+
+    def backup_to(self, destination: Path) -> None:
+        destination = destination.resolve()
+        if destination == self.path.resolve():
+            raise ValueError("El destino de la copia no puede ser la base activa.")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staged = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+        source = self.connect()
+        target = sqlite3.connect(staged, timeout=5)
+        try:
+            source.backup(target)
+            target.commit()
+            results = target.execute("PRAGMA integrity_check").fetchall()
+            if results != [("ok",)]:
+                raise sqlite3.DatabaseError(
+                    "La copia SQLite no superó la comprobación de integridad."
+                )
+            target.close()
+            source.close()
+            os.replace(staged, destination)
+        except Exception:
+            target.close()
+            source.close()
+            staged.unlink(missing_ok=True)
+            raise
+        finally:
+            if staged.exists():
+                staged.unlink(missing_ok=True)
 
     @contextmanager
     def transaction(self, *, immediate: bool = True) -> Iterator[sqlite3.Connection]:
@@ -165,12 +207,18 @@ class Database:
             connection.close()
 
     def fetch_all(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with self.connect() as connection:
+        connection = self.connect()
+        try:
             return list(connection.execute(sql, params).fetchall())
+        finally:
+            connection.close()
 
     def fetch_one(self, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row | None:
-        with self.connect() as connection:
+        connection = self.connect()
+        try:
             return cast(sqlite3.Row | None, connection.execute(sql, params).fetchone())
+        finally:
+            connection.close()
 
     def integrity_check(self) -> str:
         row = self.fetch_one("PRAGMA integrity_check")

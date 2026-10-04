@@ -5,6 +5,7 @@ import sqlite3
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
+from pathlib import Path
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -24,6 +25,7 @@ from moove_recovery.domain.errors import (
     ValidationError,
 )
 from moove_recovery.domain.models import Actor, FeeStatusInput, Role, StudentState
+from moove_recovery.infrastructure.backups import BackupManager
 from moove_recovery.infrastructure.database import Database
 from moove_recovery.infrastructure.security import hash_password, verify_password
 
@@ -243,6 +245,18 @@ class GymService:
             for row in payment_rows
         ]
         return {"summary": summary, "dues": dues, "payments": payments}
+
+    def create_backup(self, actor: Actor, destination: Path) -> Path:
+        self._require_owner(actor)
+        return BackupManager(self.db).create_backup(destination)
+
+    def restore_backup(self, actor: Actor, source_path: Path) -> Path:
+        self._require_owner(actor)
+        return BackupManager(self.db).restore_backup(source_path)
+
+    def set_backup_retention(self, actor: Actor, count: int) -> None:
+        self._require_owner(actor)
+        BackupManager(self.db).set_retention_count(count)
 
     def available_plans(self) -> list[dict[str, object]]:
         rows = self.db.fetch_all(
