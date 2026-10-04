@@ -28,6 +28,69 @@ def test_migration_and_quota_generation_are_idempotent(environment) -> None:
     assert environment["db"].integrity_check() == "ok"
 
 
+def test_future_dues_use_effective_prices_and_can_be_paid_by_period(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    other_student_id = add_student(environment, dni="20.000.001")
+    service.generate_missing_dues()
+    service.set_plan_price(
+        environment["owner"], environment["plans"][2], 3_300_000, date(2026, 12, 1)
+    )
+
+    assert service.prepare_future_dues(environment["owner"], student_id, date(2027, 1, 31)) == {
+        "created": 3,
+        "without_price": 0,
+    }
+    assert service.prepare_future_dues(environment["owner"], student_id, date(2027, 1, 1)) == {
+        "created": 0,
+        "without_price": 0,
+    }
+
+    student = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )
+    fees = {str(fee["period"]): fee for fee in student["fees"]}
+    assert {period: fees[period]["amount_cents"] for period in fees} == {
+        "2026-10": 3_000_000,
+        "2026-11": 3_000_000,
+        "2026-12": 3_300_000,
+        "2027-01": 3_300_000,
+    }
+    assert fees["2027-01"]["due_date"] == "2027-01-11"
+    other_student = next(
+        item
+        for item in service.list_students(environment["owner"])
+        if item["id"] == other_student_id
+    )
+    assert {fee["period"] for fee in other_student["fees"]} == {"2026-10"}
+
+    payment_id = service.record_payment(
+        environment["owner"],
+        student_id=student_id,
+        due_ids=[fees["2027-01"]["id"]],
+        total_cents=fees["2027-01"]["amount_cents"],
+        method="transferencia",
+    )
+    paid_period = environment["db"].fetch_one(
+        "SELECT d.period FROM payment_dues pd JOIN dues d ON d.id = pd.due_id "
+        "WHERE pd.payment_id = ?",
+        (payment_id,),
+    )[0]
+    assert paid_period == "2027-01"
+
+
+def test_future_dues_cannot_be_generated_for_inactive_student(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    service.deactivate_student(environment["owner"], student_id)
+
+    with pytest.raises(DomainError, match="inactivo"):
+        service.prepare_future_dues(environment["owner"], student_id, date(2026, 11, 1))
+    with pytest.raises(ValidationError, match="actual o uno futuro"):
+        service.prepare_future_dues(environment["owner"], student_id, date(2026, 9, 1))
+
+
 def test_late_enrollment_gets_one_half_price_first_month(environment) -> None:
     clock = environment["clock"]
     clock.current = date(2026, 10, 25)

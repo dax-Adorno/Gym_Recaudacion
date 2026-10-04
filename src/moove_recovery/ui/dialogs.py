@@ -10,11 +10,13 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPushButton,
     QTextEdit,
     QVBoxLayout,
 )
@@ -225,26 +227,24 @@ class PaymentDialog(QDialog):
         self.payment_id: int | None = None
         self.idempotency_key = str(uuid4())
         self.setWindowTitle("Registrar cobro")
-        self.setMinimumWidth(430)
+        self.setMinimumWidth(470)
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"Cobrar a {student['full_name']}"))
+        period_controls = QHBoxLayout()
+        period_controls.addWidget(QLabel("Incluir cuotas hasta (mes)"))
+        self.through_month = QDateEdit()
+        self.through_month.setCalendarPopup(True)
+        self.through_month.setDisplayFormat("MM/yyyy")
+        today = service.today()
+        self.through_month.setMinimumDate(QDate(today.year, today.month, 1))
+        self.through_month.setDate(QDate(today.year, today.month, 1))
+        period_controls.addWidget(self.through_month)
+        self.load_dues_button = QPushButton("Cargar cuotas")
+        self.load_dues_button.clicked.connect(self.load_dues_through_period)
+        period_controls.addWidget(self.load_dues_button)
+        layout.addLayout(period_controls)
         self.dues = QListWidget()
         self.dues.itemChanged.connect(self.update_total)
-        for fee in student["fees"]:
-            if int(fee["outstanding_cents"]) <= 0:
-                continue
-            item = QListWidgetItem(
-                f"{fee['period']}  ·  Vence {date.fromisoformat(fee['due_date']).strftime('%d/%m/%Y')}  ·  "
-                f"{format_money(int(fee['amount_cents']))}"
-            )
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Unchecked)
-            item.setData(Qt.ItemDataRole.UserRole, int(fee["id"]))
-            item.setData(Qt.ItemDataRole.UserRole + 1, int(fee["amount_cents"]))
-            self.dues.addItem(item)
-        if self.dues.count() == 0:
-            self.dues.addItem("No hay cuotas pendientes para cobrar.")
-            self.dues.setEnabled(False)
         layout.addWidget(self.dues)
         form = QFormLayout()
         self.method = QComboBox()
@@ -278,6 +278,60 @@ class PaymentDialog(QDialog):
         self.buttons.accepted.connect(self.confirm)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
+        self._populate_dues()
+
+    def _populate_dues(self, selected_periods: set[str] | None = None) -> None:
+        self.dues.clear()
+        self.dues.setEnabled(True)
+        for fee in self.student["fees"]:
+            if int(fee["outstanding_cents"]) <= 0:
+                continue
+            item = QListWidgetItem(
+                f"{fee['period']}  ·  Vence {date.fromisoformat(fee['due_date']).strftime('%d/%m/%Y')}  ·  "
+                f"{format_money(int(fee['amount_cents']))}"
+            )
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            period = str(fee["period"])
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if selected_periods is not None and period in selected_periods
+                else Qt.CheckState.Unchecked
+            )
+            item.setData(Qt.ItemDataRole.UserRole, int(fee["id"]))
+            item.setData(Qt.ItemDataRole.UserRole + 1, int(fee["amount_cents"]))
+            item.setData(Qt.ItemDataRole.UserRole + 2, period)
+            self.dues.addItem(item)
+        if self.dues.count() == 0:
+            self.dues.addItem("No hay cuotas pendientes para cobrar.")
+            self.dues.setEnabled(False)
+        self.update_total()
+
+    def load_dues_through_period(self) -> None:
+        selected_periods = {
+            str(self.dues.item(index).data(Qt.ItemDataRole.UserRole + 2))
+            for index in range(self.dues.count())
+            if self.dues.item(index).checkState() == Qt.CheckState.Checked
+            and self.dues.item(index).data(Qt.ItemDataRole.UserRole + 2) is not None
+        }
+        through = self.through_month.date().toPython()
+        try:
+            counts = self.service.prepare_future_dues(self.actor, int(self.student["id"]), through)
+            self.student = next(
+                student
+                for student in self.service.list_students(self.actor)
+                if student["id"] == self.student["id"]
+            )
+            self._populate_dues(selected_periods)
+        except DomainError as error:
+            QMessageBox.warning(self, "No se pudieron cargar las cuotas", str(error))
+            return
+        if counts["without_price"]:
+            QMessageBox.warning(
+                self,
+                "Faltan precios",
+                f"No se generaron {counts['without_price']} cuota(s) porque falta configurar "
+                "el precio del plan para esos períodos.",
+            )
 
     def selected(self) -> tuple[list[int], int]:
         due_ids: list[int] = []

@@ -2,6 +2,7 @@
 
 - Reglas puras de vencimiento, ventana de aviso, alta día 20/21, alta posterior al vencimiento, inactividad y estados.
 - Persistencia SQLite real en base temporal, claves foráneas, migración repetida e idempotencia de cuotas.
+- Cuotas futuras generadas por alumno hasta el período elegido, precio efectivo por mes, idempotencia y asociación del pago al período adelantado.
 - Inicialización segura del dueño, verificación de contraseña y bloqueo de segundo administrador.
 - Autorización por servicio para precios, baja, anulaciones e informes globales.
 - Búsqueda parcial sin distinguir mayúsculas ni tildes, incluyendo `%` y `_` literales; DNI duplicado activo/inactivo.

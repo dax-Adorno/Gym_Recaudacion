@@ -363,7 +363,9 @@ class GymService:
             "Reactivación pendiente de definición: hace falta acordar primera cuota e inactividad."
         )
 
-    def generate_missing_dues(self) -> dict[str, int]:
+    def generate_missing_dues(
+        self, *, through: date | None = None, student_id: int | None = None
+    ) -> dict[str, int]:
         today = self.today()
         now = self.now().isoformat(timespec="seconds")
         counts = {"created": 0, "without_price": 0}
@@ -374,11 +376,16 @@ class GymService:
             if start_row is None:
                 return counts
             operational_start = date.fromisoformat(start_row[0])
-            students = connection.execute("SELECT * FROM students").fetchall()
+            students = connection.execute(
+                "SELECT * FROM students WHERE id = ?"
+                if student_id is not None
+                else "SELECT * FROM students",
+                (student_id,) if student_id is not None else (),
+            ).fetchall()
             for student in students:
                 enrollment = date.fromisoformat(student["enrolled_on"])
                 lower = max(month_start(enrollment), month_start(operational_start))
-                upper = month_start(today)
+                upper = month_start(through or today)
                 inactive_on = (
                     date.fromisoformat(student["inactive_on"]) if student["inactive_on"] else None
                 )
@@ -433,6 +440,20 @@ class GymService:
                             counts["created"] += 1
                     period = next_month(period)
         return counts
+
+    def prepare_future_dues(self, actor: Actor, student_id: int, through: date) -> dict[str, int]:
+        if actor.role not in {Role.OWNER, Role.EMPLOYEE}:
+            raise PermissionDenied("No tienes permiso para preparar cuotas.")
+        through = month_start(through)
+        current_period = month_start(self.today())
+        if through < current_period:
+            raise ValidationError("Selecciona el mes actual o uno futuro.")
+        student = self.db.fetch_one("SELECT active FROM students WHERE id = ?", (student_id,))
+        if student is None:
+            raise DomainError("No se encontró el alumno seleccionado.")
+        if through > current_period and not student["active"]:
+            raise DomainError("No se pueden generar cuotas futuras para un alumno inactivo.")
+        return self.generate_missing_dues(through=through, student_id=student_id)
 
     def list_students(
         self, actor: Actor, *, query: str = "", filter_name: str = "Todos"
