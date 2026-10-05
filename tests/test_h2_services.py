@@ -22,7 +22,7 @@ def test_migration_and_quota_generation_are_idempotent(environment) -> None:
         item for item in service.list_students(environment["owner"]) if item["id"] == student_id
     )
     assert student["fees"][0]["period"] == "2026-10"
-    assert student["fees"][0]["due_date"] == "2026-10-12"
+    assert student["fees"][0]["due_date"] == "2026-10-10"
     assert student["activity"] == "Musculación"
     service.initialize()
     assert environment["db"].integrity_check() == "ok"
@@ -56,7 +56,7 @@ def test_future_dues_use_effective_prices_and_can_be_paid_by_period(environment)
         "2026-12": 3_300_000,
         "2027-01": 3_300_000,
     }
-    assert fees["2027-01"]["due_date"] == "2027-01-11"
+    assert fees["2027-01"]["due_date"] == "2027-01-10"
     other_student = next(
         item
         for item in service.list_students(environment["owner"])
@@ -89,6 +89,53 @@ def test_future_dues_cannot_be_generated_for_inactive_student(environment) -> No
         service.prepare_future_dues(environment["owner"], student_id, date(2026, 11, 1))
     with pytest.raises(ValidationError, match="actual o uno futuro"):
         service.prepare_future_dues(environment["owner"], student_id, date(2026, 9, 1))
+
+
+def test_reactivation_creates_full_current_month_and_skips_inactive_months(environment) -> None:
+    service: GymService = environment["service"]
+    clock = environment["clock"]
+    student_id = add_student(environment)
+    service.generate_missing_dues()
+    service.deactivate_student(environment["owner"], student_id)
+
+    clock.current = date(2026, 12, 25)
+    service.reactivate_student(environment["owner"], student_id)
+
+    student = next(
+        item for item in service.list_students(environment["owner"]) if item["id"] == student_id
+    )
+    fees = {str(fee["period"]): fee for fee in student["fees"]}
+    assert set(fees) == {"2026-10", "2026-12"}
+    assert fees["2026-12"]["amount_cents"] == 3_000_000
+    assert fees["2026-12"]["discount_cents"] == 0
+    assert fees["2026-12"]["due_date"] == "2026-12-10"
+    assert student["state_label"] == "Deudor"
+    assert student["active"] is True
+    assert student["inactive_on"] is None
+    assert [
+        item["detail"]
+        for item in service.list_student_history(environment["owner"], student_id)
+        if item["kind"] == "movimiento"
+    ][:2] == ["reactivacion", "baja"]
+
+    with pytest.raises(DomainError, match="ya está activo"):
+        service.reactivate_student(environment["owner"], student_id)
+
+
+def test_employee_cannot_reactivate_student(environment) -> None:
+    service: GymService = environment["service"]
+    student_id = add_student(environment)
+    service.deactivate_student(environment["owner"], student_id)
+    service.create_employee(
+        environment["owner"],
+        full_name="Empleado Ficticio",
+        username="empleado-reactivacion",
+        password="ClaveEmpleado-Reactivacion",
+    )
+    employee = service.login("empleado-reactivacion", "ClaveEmpleado-Reactivacion")
+    assert employee is not None
+    with pytest.raises(PermissionDenied):
+        service.reactivate_student(employee, student_id)
 
 
 def test_dashboard_separates_cash_month_from_covered_periods(environment) -> None:

@@ -14,11 +14,12 @@
 - Se usa Argon2id con los parámetros predeterminados de `argon2-cffi`; el hash codifica sal y parámetros para permitir futuras verificaciones.
 - PySide6 6.11.2 es la versión estable fijada para desarrollo y entrega inicial.
 - Exportes: ReportLab 5.0.1 para PDF (BSD) y openpyxl 3.1.5 para XLSX (MIT); importes del libro se almacenan como celdas numéricas y DNI/teléfono como texto.
-- Los intervalos de membresía se auditan; la reactivación queda bloqueada hasta definir su política de cuota.
+- Reactivación: se conserva el registro y el historial; se cobra la cuota completa del mes de reingreso con vencimiento regular, se excluyen los meses inactivos y no se repite la promoción de alta. Si la fecha límite pasó, figura vencida al reingresar.
+- Vencimiento de fin de semana: si el día 10 cae sábado o domingo, la cuota se considera vencida el lunes siguiente; no se traslada el vencimiento al lunes.
+- Calendario mensual global reservado al dueño; incluye vistas de vencimientos, cobros y movimientos de alumnos.
 
 ## Pendiente de decisión del dueño
 
-- Reactivación: primer vencimiento, importe y tratamiento de meses inactivos.
 - Cambio de plan: vigencia y efecto sobre adelantos.
 - Baja con adelantos: devolución o consumo del saldo.
 - Promoción trimestral: porcentaje, elegibilidad, inicio y cuotas ya generadas.

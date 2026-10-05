@@ -56,11 +56,11 @@ Crear credenciales en configuración inicial; nunca entregar contraseñas univer
 ## 6. Reglas confirmadas de cuotas
 
 R01. Planes: 2, 3 o 4 veces por semana. Precio configurado por el dueño. Sin precios ficticios en producción; impedir generar/cobrar cuotas sin precio definido y mostrar cómo resolverlo.
-R02. Cuotas mensuales por calendario. Vencimiento día 10. Si es sábado o domingo, mover al lunes siguiente. No excluir feriados.
-R03. Puede pagarse durante todo el día de vencimiento; deuda vencida a partir del día siguiente.
-R04. Aviso amarillo desde 3 días hábiles antes del vencimiento efectivo. Solo lunes a viernes son hábiles. Una vez iniciada la ventana, permanece también durante el fin de semana hasta vencer.
+R02. Cuotas mensuales por calendario. Vencimiento nominal día 10; no se traslada si cae sábado o domingo. No excluir feriados.
+R03. Puede pagarse hasta el fin del día 10 si es hábil, o hasta el domingo cuando el 10 cae sábado/domingo. En ese caso, deuda vencida desde el lunes siguiente.
+R04. Aviso amarillo desde 3 días hábiles antes del día 10. Solo lunes a viernes son hábiles. Una vez iniciada la ventana, permanece durante el fin de semana; si el 10 cae en fin de semana, pasa a vencida el lunes.
 R05. Alta días 1 a 20 inclusive: cuota completa del mes. Alta desde el 21: 50 % automático sobre ese mes, visible al empleado y no editable por él.
-R06. Si el alta es posterior al vencimiento efectivo mensual, la primera cuota vence el día del alta. En otro caso vence en la fecha mensual. Los meses siguientes usan R02.
+R06. Si el alta es posterior al vencimiento mensual, la primera cuota vence el día del alta. En otro caso vence el día 10. Al reactivar, se cobra el mes completo con vencimiento regular; si ya pasó, figura vencida inmediatamente. Los meses inactivos no se cobran.
 R07. Solo cuotas completas: no pagos parciales. El importe final después de un descuento constituye la cuota completa.
 R08. Se pueden abonar meses futuros; cada pago debe identificar los períodos cubiertos. Un pago puede cubrir varias cuotas.
 R09. Promoción de tres meses con descuento configurable y aplicado exclusivamente por dueño. No acumular con el 50 % del ingreso. Cuando hay descuento de ingreso, la promoción puede comenzar el mes siguiente.
@@ -131,7 +131,6 @@ El generador puede tener código fuente en tools/license_issuer pero excluirlo d
 ## 13. Decisiones pendientes: no inventar acuerdos
 
 Estas no bloquean estructura ni reglas ya confirmadas. Registrar decisiones en docs/decisions.md.
-- Reactivación: fecha de primer vencimiento, cuota completa/mitad, y exclusión de meses inactivos. No equipararla automáticamente a un alta nueva con promoción.
 - Cambio de plan: propuesta aplicar desde mes siguiente, sin alterar cuotas ya pagadas; confirmar tratamiento de adelantos.
 - Baja con adelantos: preservar pagos; política de devolución/consumo pendiente. No devolver ni confiscar automáticamente.
 - Promoción trimestral: porcentaje, vigencia, elegibilidad de alumnos antiguos, inicio del trimestre y aplicación sobre cuotas ya generadas. Precios/porcentaje serán configurables; no hardcodearlos. Propuesta: tres meses consecutivos, pago completo conjunto y sin aplicación retroactiva.
@@ -193,7 +192,7 @@ Ramas por hito, commits pequeños y PR con problema, cambios, pruebas y limitaci
 
 H1. Estructura, configuración, conexión SQLite/migraciones, reloj y reglas puras con tests; README y CI.
 H2. Usuarios/permisos, alumnos/búsqueda, generación de cuotas, cobro transaccional y estados; primer circuito completo en UI.
-H3. Adelantos, promociones, historial, anulaciones, bajas; reactivación/cambio de plan después de resolver sus reglas.
+H3. Adelantos, promociones, historial, anulaciones, bajas y cambio de plan después de resolver sus reglas.
 H4. Panel, PDF/XLSX, respaldo/restauración y sus pruebas.
 H5. Licencia por equipo, generador separado, branding, instalador y documentación operativa.
 H6. Integración completa, pruebas Windows offline, actualización/recuperación y revisión del paquete.

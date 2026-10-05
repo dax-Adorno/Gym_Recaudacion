@@ -139,17 +139,51 @@ def test_failed_atomic_replace_rolls_back_active_database(
     assert environment["db"].integrity_check() == "ok"
 
 
-def test_database_migration_takes_snapshot_before_upgrade(
-    environment, tmp_path, monkeypatch
-) -> None:
+def test_database_migration_takes_snapshot_before_upgrade(environment, tmp_path) -> None:
     from moove_recovery.infrastructure import database as database_module
 
-    monkeypatch.setattr(database_module, "SCHEMA_VERSION", 2)
+    environment["clock"].current = date(2026, 10, 15)
+    student_id = add_student(environment)
+    late_student_id = add_student(environment, day=date(2026, 10, 11), dni="20.000.002")
+    environment["service"].generate_missing_dues()
+    with environment["db"].transaction() as connection:
+        connection.execute(
+            "UPDATE dues SET due_date = '2026-10-12' WHERE student_id IN (?, ?)",
+            (student_id, late_student_id),
+        )
+        connection.execute("DELETE FROM settings WHERE key = 'billing_policy_version'")
+        connection.execute("PRAGMA user_version = 1")
     environment["service"].initialize()
 
     snapshots = list((environment["db"].path.parent / "backups").glob("pre-migration-*.sqlite3"))
     assert len(snapshots) == 1
-    BackupManager(environment["db"]).validate_backup(snapshots[0])
+    snapshot = sqlite3.connect(snapshots[0])
+    try:
+        assert snapshot.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert (
+            snapshot.execute("SELECT COUNT(*) FROM dues WHERE due_date = '2026-10-12'").fetchone()[
+                0
+            ]
+            == 2
+        )
+        assert snapshot.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        snapshot.close()
+    migrated = environment["db"].fetch_one(
+        "SELECT due_date, amount_cents FROM dues WHERE student_id = ?", (student_id,)
+    )
+    assert migrated["due_date"] == "2026-10-10"
+    assert migrated["amount_cents"] == 3_000_000
+    late_migrated = environment["db"].fetch_one(
+        "SELECT due_date FROM dues WHERE student_id = ?", (late_student_id,)
+    )
+    assert late_migrated["due_date"] == "2026-10-11"
+    version = environment["db"].fetch_one("PRAGMA user_version")
+    assert version[0] == database_module.SCHEMA_VERSION
+    policy = environment["db"].fetch_one(
+        "SELECT value FROM settings WHERE key = 'billing_policy_version'"
+    )
+    assert policy[0] == database_module.BILLING_POLICY_VERSION
 
 
 def test_manual_backup_and_restore_are_owner_only(environment, tmp_path) -> None:

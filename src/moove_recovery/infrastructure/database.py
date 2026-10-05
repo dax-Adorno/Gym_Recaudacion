@@ -10,6 +10,7 @@ from typing import cast
 from uuid import uuid4
 
 SCHEMA_VERSION = 1
+BILLING_POLICY_VERSION = "2"
 
 MIGRATION_1 = """
 CREATE TABLE settings (
@@ -127,6 +128,20 @@ CREATE TABLE audit_log (
 );
 """
 
+MIGRATE_BILLING_POLICY_2 = """
+UPDATE dues
+SET due_date = CASE
+    WHEN substr((SELECT enrolled_on FROM students WHERE id = dues.student_id), 1, 7) = dues.period
+     AND (SELECT enrolled_on FROM students WHERE id = dues.student_id) >=
+         COALESCE((SELECT value FROM settings WHERE key = 'operational_start'), '9999-12-31')
+     AND CAST(substr((SELECT enrolled_on FROM students WHERE id = dues.student_id), 9, 2) AS INTEGER) > 10
+    THEN (SELECT enrolled_on FROM students WHERE id = dues.student_id)
+    ELSE substr(dues.period, 1, 7) || '-10'
+END;
+INSERT INTO settings(key, value) VALUES ('billing_policy_version', '2')
+ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+"""
+
 
 class Database:
     def __init__(self, path: Path) -> None:
@@ -158,6 +173,26 @@ class Database:
                 try:
                     connection.executescript(
                         "BEGIN IMMEDIATE;\n" + MIGRATION_1 + "\nPRAGMA user_version = 1;\nCOMMIT;"
+                    )
+                except Exception:
+                    connection.rollback()
+                    raise
+            policy = connection.execute(
+                "SELECT value FROM settings WHERE key = 'billing_policy_version'"
+            ).fetchone()
+            if policy is None or policy[0] != BILLING_POLICY_VERSION:
+                has_dues = connection.execute("SELECT 1 FROM dues LIMIT 1").fetchone()
+                if has_dues:
+                    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    backup = (
+                        self.path.parent
+                        / "backups"
+                        / f"pre-migration-{stamp}-{uuid4().hex[:8]}.sqlite3"
+                    )
+                    self.backup_to(backup)
+                try:
+                    connection.executescript(
+                        "BEGIN IMMEDIATE;\n" + MIGRATE_BILLING_POLICY_2 + "\nCOMMIT;"
                     )
                 except Exception:
                     connection.rollback()

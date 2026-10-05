@@ -210,7 +210,8 @@ class StudentDialog(QDialog):
                 QMessageBox.warning(
                     self,
                     "DNI existente",
-                    f"Ya existe un alumno {status} con ese DNI. Busca la coincidencia antes de continuar.",
+                    f"Ya existe un alumno {status} con ese DNI. Busca la coincidencia antes de "
+                    "continuar; si está inactivo, puedes reactivarlo desde su ficha.",
                 )
             else:
                 QMessageBox.warning(self, "No se pudo guardar", str(error))

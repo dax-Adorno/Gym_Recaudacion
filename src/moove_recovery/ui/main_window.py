@@ -18,6 +18,7 @@ from moove_recovery import __version__
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.models import Actor, Role
 from moove_recovery.ui.backups_page import BackupsPage
+from moove_recovery.ui.calendar_page import CalendarPage
 from moove_recovery.ui.dashboard_page import DashboardPage
 from moove_recovery.ui.management_pages import PricesPage, UsersPage
 from moove_recovery.ui.students_page import StudentsPage
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
             side_layout.addSpacing(15)
             side_layout.addWidget(self._side_label("GESTIÓN"))
             side_layout.addWidget(self._nav_button("Panel", "Panel"))
+            side_layout.addWidget(self._nav_button("Calendario", "Calendario"))
             side_layout.addWidget(self._side_label("ADMINISTRACIÓN"))
             side_layout.addWidget(self._nav_button("Planes y precios", "Planes y precios"))
             side_layout.addWidget(self._nav_button("Respaldos", "Respaldos"))
@@ -92,15 +94,18 @@ class MainWindow(QMainWindow):
         self.page_widgets["Alumnos"] = self.students_page
         if actor.role == Role.OWNER:
             self.dashboard_page = DashboardPage(service, actor)
+            self.calendar_page = CalendarPage(service, actor)
             self.backups_page = BackupsPage(service, actor)
             self.backups_page.restored.connect(self.close)
             self.prices_page = PricesPage(service, actor)
             self.users_page = UsersPage(service, actor)
             self.page_widgets["Panel"] = self.dashboard_page
+            self.page_widgets["Calendario"] = self.calendar_page
             self.page_widgets["Planes y precios"] = self.prices_page
             self.page_widgets["Respaldos"] = self.backups_page
             self.page_widgets["Usuarios"] = self.users_page
             self.pages.addWidget(self.dashboard_page)
+            self.pages.addWidget(self.calendar_page)
             self.pages.addWidget(self.prices_page)
             self.pages.addWidget(self.backups_page)
             self.pages.addWidget(self.users_page)
@@ -136,6 +141,8 @@ class MainWindow(QMainWindow):
             self.students_page.refresh()
         elif page == "Panel" and hasattr(self, "dashboard_page"):
             self.dashboard_page.refresh()
+        elif page == "Calendario" and hasattr(self, "calendar_page"):
+            self.calendar_page.refresh()
         elif page == "Respaldos" and hasattr(self, "backups_page"):
             self.backups_page.refresh()
         elif page == "Planes y precios" and hasattr(self, "prices_page"):
