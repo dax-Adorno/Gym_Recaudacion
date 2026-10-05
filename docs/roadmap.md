@@ -37,7 +37,8 @@
 
 ## H5 · Recuperación y distribución
 
-- [ ] Licencia offline Ed25519, branding completo e instalador Windows.
+- [x] Logos del gimnasio y DAX en el acceso y firma personal clicable a Instagram.
+- [ ] Licencia offline Ed25519, branding restante e instalador Windows.
 
 ## H6 · Cierre
 
