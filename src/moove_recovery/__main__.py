@@ -18,7 +18,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("MOOVE RECOVERY")
     app.setOrganizationName("MOOVE RECOVERY")
-    app.setFont(QFont("Segoe UI", 9))
+    app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(APP_STYLES)
 
     directory = data_directory()
