@@ -7,19 +7,23 @@ from moove_recovery.domain.billing_rules import (
     first_due_date,
     monthly_due_date,
     notice_start,
+    overdue_on,
 )
 from moove_recovery.domain.models import FeeStatusInput, StudentState
 
 
-def test_due_date_moves_weekend_to_monday_and_notice_uses_business_days() -> None:
+def test_weekend_due_becomes_overdue_the_following_monday() -> None:
     due = monthly_due_date(date(2026, 10, 1))
-    assert due == date(2026, 10, 12)
+    assert due == date(2026, 10, 10)
+    assert overdue_on(due) == date(2026, 10, 12)
     assert notice_start(due) == date(2026, 10, 7)
-    assert monthly_due_date(date(2027, 1, 1)) == date(2027, 1, 11)
+    sunday_due = monthly_due_date(date(2027, 1, 1))
+    assert sunday_due == date(2027, 1, 10)
+    assert overdue_on(sunday_due) == date(2027, 1, 11)
 
 
-def test_notice_window_includes_weekend_until_due_date() -> None:
-    current = FeeStatusInput(date(2026, 10, 12), 30_000, 0)
+def test_notice_window_includes_weekend_and_overdue_starts_monday() -> None:
+    current = FeeStatusInput(date(2026, 10, 10), 30_000, 0)
     assert (
         derive_student_status(
             active=True, today=date(2026, 10, 6), current_fee=current, fees=[current]
@@ -32,7 +36,7 @@ def test_notice_window_includes_weekend_until_due_date() -> None:
         ).state
         == StudentState.WARNING
     )
-    for today in (date(2026, 10, 10), date(2026, 10, 11), date(2026, 10, 12)):
+    for today in (date(2026, 10, 10), date(2026, 10, 11)):
         result = derive_student_status(
             active=True, today=today, current_fee=current, fees=[current]
         )
@@ -40,7 +44,7 @@ def test_notice_window_includes_weekend_until_due_date() -> None:
     assert (
         derive_student_status(
             active=True,
-            today=date(2026, 10, 13),
+            today=date(2026, 10, 12),
             current_fee=current,
             fees=[current],
         ).state
@@ -60,8 +64,8 @@ def test_enrollment_discount_changes_after_day_twenty_and_only_first_period() ->
 
 def test_first_due_uses_enrollment_day_only_when_after_effective_due() -> None:
     period = date(2026, 10, 1)
-    assert first_due_date(date(2026, 10, 11), period) == date(2026, 10, 12)
-    assert first_due_date(date(2026, 10, 12), period) == date(2026, 10, 12)
+    assert first_due_date(date(2026, 10, 11), period) == date(2026, 10, 11)
+    assert first_due_date(date(2026, 10, 10), period) == date(2026, 10, 10)
     assert first_due_date(date(2026, 10, 13), period) == date(2026, 10, 13)
 
 

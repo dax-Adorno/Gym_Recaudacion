@@ -17,8 +17,8 @@
 - [x] Cobro de cuotas completas en una transacción, periodos asociados e idempotencia.
 - [x] Estados con prioridad y ficha con cuotas e historial.
 - [x] Baja lógica reservada al dueño; no borra pagos ni cuotas.
+- [x] Reactivación del mismo alumno: cuota completa desde el mes de reingreso, sin facturar meses inactivos.
 - [ ] Inspección visual manual de formularios en Windows pendiente.
-- [ ] Reactivación bloqueada hasta acordar primera cuota y meses inactivos.
 
 ## H3 · Operación avanzada
 
@@ -33,6 +33,7 @@
 - [x] Detalle de cuotas/pagos y exportes PDF/XLSX con saldos, descuentos, medios y anulaciones identificadas.
 - [x] Se omite el total agregado de deuda vencida (opcional); el detalle conserva saldos por cuota.
 - [x] Respaldo SQLite consistente, restauración validada y pruebas.
+- [x] Calendario mensual del dueño con filtros de vencimientos, cobros y movimientos de alumnos.
 
 ## H5 · Recuperación y distribución
 

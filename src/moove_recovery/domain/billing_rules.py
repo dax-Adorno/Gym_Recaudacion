@@ -24,12 +24,15 @@ def add_months(value: date, count: int) -> date:
 
 
 def monthly_due_date(period: date) -> date:
-    due = date(period.year, period.month, 10)
+    return date(period.year, period.month, 10)
+
+
+def overdue_on(due: date) -> date:
     if due.weekday() == 5:
         return due + timedelta(days=2)
     if due.weekday() == 6:
         return due + timedelta(days=1)
-    return due
+    return due + timedelta(days=1)
 
 
 def notice_start(due: date) -> date:
@@ -72,7 +75,11 @@ def derive_student_status(
     if not active:
         return StudentStatus(StudentState.INACTIVE, "Inactivo", "Alumno inactivo")
 
-    overdue = [fee for fee in fees if fee.due_date < today and fee.paid_cents < fee.amount_cents]
+    overdue = [
+        fee
+        for fee in fees
+        if overdue_on(fee.due_date) <= today and fee.paid_cents < fee.amount_cents
+    ]
     if overdue:
         return StudentStatus(StudentState.OVERDUE, "Deudor", "Tiene cuotas vencidas impagas")
 

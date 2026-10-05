@@ -20,8 +20,10 @@ La primera apertura solicita crear el dueño y definir los precios reales de los
 ## Estado de implementación
 
 - H1: estructura, migración inicial de SQLite, reglas de cuotas y pruebas.
-- H2: login, roles, alumnos, cuotas, cobros y estados en la interfaz.
-- H3-H6: todavía no implementados; revisar `docs/decisions.md` antes de continuar.
+- H2: login, roles, alumnos, cuotas, cobros, bajas y reactivación.
+- H3: adelantos y anulación auditada de cobros; promociones trimestrales y algunas reglas operativas siguen pendientes.
+- H4: panel, informes PDF/XLSX, respaldos y calendario mensual del dueño.
+- H5-H6: licencia offline, instalador Windows y validación integral pendientes.
 
 El avance detallado y los pendientes están en `docs/roadmap.md`.
 

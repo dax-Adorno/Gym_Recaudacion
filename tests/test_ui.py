@@ -4,6 +4,7 @@ from conftest import add_student
 from PySide6.QtCore import QDate, Qt
 
 from moove_recovery.application.service import GymService
+from moove_recovery.ui.calendar_page import CalendarPage
 from moove_recovery.ui.dashboard_page import DashboardPage
 from moove_recovery.ui.dialogs import PaymentDialog
 from moove_recovery.ui.main_window import MainWindow
@@ -61,6 +62,7 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     window = MainWindow(service, environment["owner"])
     qtbot.addWidget(window)
     assert "Panel" in window.nav_buttons
+    assert "Calendario" in window.nav_buttons
     assert "Respaldos" in window.nav_buttons
     service.create_employee(
         environment["owner"],
@@ -73,7 +75,42 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     employee_window = MainWindow(service, employee)
     qtbot.addWidget(employee_window)
     assert "Panel" not in employee_window.nav_buttons
+    assert "Calendario" not in employee_window.nav_buttons
     assert "Respaldos" not in employee_window.nav_buttons
+
+
+def test_calendar_page_has_three_event_actions_and_month_navigation(qtbot, environment) -> None:
+    add_student(environment)
+    service: GymService = environment["service"]
+    service.generate_missing_dues()
+    page = CalendarPage(service, environment["owner"])
+    qtbot.addWidget(page)
+
+    assert set(page.category_buttons) == {"vencimientos", "cobros", "movimientos"}
+    assert len(page.day_button_list) == 42
+    page.day_buttons[date(2026, 10, 10)].click()
+    assert page.events_table.rowCount() == 1
+    page.select_category("movimientos")
+    page.day_buttons[date(2026, 10, 3)].click()
+    assert page.events_table.rowCount() == 1
+    assert page.events_table.item(0, 0).text() == "Ana Pérez"
+    page.shift_month(1)
+    assert page.month_title.text() == "Noviembre 2026"
+    assert page.events_table.rowCount() == 0
+
+
+def test_owner_can_reactivate_selected_inactive_student_from_detail(qtbot, environment) -> None:
+    student_id = add_student(environment)
+    service: GymService = environment["service"]
+    service.deactivate_student(environment["owner"], student_id)
+    page = StudentsPage(service, environment["owner"])
+    qtbot.addWidget(page)
+    page.filter.setCurrentText("Inactivos")
+    page.table.selectRow(0)
+
+    assert page.selected_id == student_id
+    assert not page.reactivate_button.isHidden()
+    assert page.reactivate_button.isEnabled()
 
 
 def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environment) -> None:

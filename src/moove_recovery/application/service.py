@@ -16,6 +16,7 @@ from moove_recovery.domain.billing_rules import (
     month_start,
     monthly_due_date,
     next_month,
+    overdue_on,
 )
 from moove_recovery.domain.errors import (
     DomainError,
@@ -455,9 +456,49 @@ class GymService:
 
     def reactivate_student(self, actor: Actor, student_id: int) -> None:
         self._require_owner(actor)
-        raise DomainError(
-            "Reactivación pendiente de definición: hace falta acordar primera cuota e inactividad."
-        )
+        today = self.today()
+        now = self.now().isoformat(timespec="seconds")
+        period = month_start(today)
+        with self.db.transaction() as connection:
+            student = connection.execute(
+                "SELECT active, plan_id FROM students WHERE id = ?", (student_id,)
+            ).fetchone()
+            if student is None:
+                raise DomainError("No se encontró el alumno seleccionado.")
+            if student["active"]:
+                raise DomainError("El alumno ya está activo.")
+            price = connection.execute(
+                "SELECT 1 FROM plan_prices WHERE plan_id = ? AND starts_on <= ? "
+                "ORDER BY starts_on DESC LIMIT 1",
+                (student["plan_id"], period.isoformat()),
+            ).fetchone()
+            if price is None:
+                raise DomainError(
+                    "No hay un precio configurado para el plan en el mes de reingreso."
+                )
+            connection.execute(
+                "UPDATE students SET active = 1, inactive_on = NULL WHERE id = ? AND active = 0",
+                (student_id,),
+            )
+            connection.execute(
+                "INSERT INTO student_history(student_id, event_type, event_date, payload, actor_id, created_at) "
+                "VALUES (?, 'reactivacion', ?, ?, ?, ?)",
+                (student_id, today.isoformat(), json.dumps({"cuota": "completa"}), actor.id, now),
+            )
+            self._audit(
+                connection,
+                actor.id,
+                "alumno_reactivacion",
+                "students",
+                student_id,
+                {
+                    "reactivated_on": today.isoformat(),
+                    "charge": "full_month",
+                    "inactive_months_backbilled": False,
+                },
+                now,
+            )
+        self.generate_missing_dues(through=today, student_id=student_id)
 
     def generate_missing_dues(
         self, *, through: date | None = None, student_id: int | None = None
@@ -482,59 +523,77 @@ class GymService:
                 enrollment = date.fromisoformat(student["enrolled_on"])
                 lower = max(month_start(enrollment), month_start(operational_start))
                 upper = month_start(through or today)
-                inactive_on = (
-                    date.fromisoformat(student["inactive_on"]) if student["inactive_on"] else None
+                history = connection.execute(
+                    "SELECT event_type, event_date FROM student_history "
+                    "WHERE student_id = ? AND event_type IN ('baja', 'reactivacion') "
+                    "ORDER BY event_date, id",
+                    (student["id"],),
+                ).fetchall()
+                cycles = _billing_cycles(
+                    enrollment=enrollment,
+                    operational_start=operational_start,
+                    history=history,
+                    active=bool(student["active"]),
+                    inactive_on=(
+                        date.fromisoformat(student["inactive_on"])
+                        if student["inactive_on"]
+                        else None
+                    ),
+                    through=upper,
                 )
-                if inactive_on:
-                    upper = min(upper, month_start(inactive_on))
-                period = lower
-                while period <= upper:
-                    exists = connection.execute(
-                        "SELECT 1 FROM dues WHERE student_id = ? AND period = ?",
-                        (student["id"], period.strftime("%Y-%m")),
-                    ).fetchone()
-                    if not exists:
-                        price = connection.execute(
-                            "SELECT pp.amount_cents FROM plan_prices pp "
-                            "WHERE pp.plan_id = ? AND pp.starts_on <= ? ORDER BY pp.starts_on DESC LIMIT 1",
-                            (student["plan_id"], period.isoformat()),
+                for cycle_start, cycle_end in cycles:
+                    period = max(lower, month_start(cycle_start))
+                    period_end = min(upper, month_start(cycle_end))
+                    while period <= period_end:
+                        exists = connection.execute(
+                            "SELECT 1 FROM dues WHERE student_id = ? AND period = ?",
+                            (student["id"], period.strftime("%Y-%m")),
                         ).fetchone()
-                        if price is None:
-                            counts["without_price"] += 1
-                        else:
-                            base = int(price["amount_cents"])
-                            first_operational_charge = (
-                                period == month_start(enrollment)
-                                and enrollment >= operational_start
-                            )
-                            amount, discount, source = (
-                                enrollment_amount(base, enrollment, period)
-                                if first_operational_charge
-                                else (base, 0, None)
-                            )
-                            due = (
-                                first_due_date(enrollment, period)
-                                if first_operational_charge
-                                else monthly_due_date(period)
-                            )
-                            connection.execute(
-                                "INSERT INTO dues(student_id, plan_id, period, due_date, base_cents, "
-                                "discount_cents, amount_cents, discount_source, created_at) "
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (
-                                    student["id"],
-                                    student["plan_id"],
-                                    period.strftime("%Y-%m"),
-                                    due.isoformat(),
-                                    base,
-                                    discount,
-                                    amount,
-                                    source,
-                                    now,
-                                ),
-                            )
-                            counts["created"] += 1
-                    period = next_month(period)
+                        if not exists:
+                            price = connection.execute(
+                                "SELECT pp.amount_cents FROM plan_prices pp "
+                                "WHERE pp.plan_id = ? AND pp.starts_on <= ? "
+                                "ORDER BY pp.starts_on DESC LIMIT 1",
+                                (student["plan_id"], period.isoformat()),
+                            ).fetchone()
+                            if price is None:
+                                counts["without_price"] += 1
+                            else:
+                                base = int(price["amount_cents"])
+                                first_cycle_charge = period == month_start(cycle_start)
+                                first_enrollment_charge = (
+                                    first_cycle_charge
+                                    and cycle_start == enrollment
+                                    and enrollment >= operational_start
+                                )
+                                amount, discount, source = (
+                                    enrollment_amount(base, enrollment, period)
+                                    if first_enrollment_charge
+                                    else (base, 0, None)
+                                )
+                                due = (
+                                    first_due_date(cycle_start, period)
+                                    if first_cycle_charge and cycle_start == enrollment
+                                    else monthly_due_date(period)
+                                )
+                                connection.execute(
+                                    "INSERT INTO dues(student_id, plan_id, period, due_date, base_cents, "
+                                    "discount_cents, amount_cents, discount_source, created_at) "
+                                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                    (
+                                        student["id"],
+                                        student["plan_id"],
+                                        period.strftime("%Y-%m"),
+                                        due.isoformat(),
+                                        base,
+                                        discount,
+                                        amount,
+                                        source,
+                                        now,
+                                    ),
+                                )
+                                counts["created"] += 1
+                        period = next_month(period)
         return counts
 
     def prepare_future_dues(self, actor: Actor, student_id: int, through: date) -> dict[str, int]:
@@ -765,6 +824,93 @@ class GymService:
         )
         return [dict(row) for row in rows]
 
+    def list_calendar_events(
+        self, actor: Actor, start: date, end: date, category: str
+    ) -> list[dict[str, object]]:
+        self._require_owner(actor)
+        if end < start:
+            raise ValidationError("El final del calendario no puede preceder al inicio.")
+        if category not in {"vencimientos", "cobros", "movimientos"}:
+            raise ValidationError("Selecciona una categoría válida para el calendario.")
+        start_text, end_text = start.isoformat(), end.isoformat()
+        if category == "vencimientos":
+            rows = self.db.fetch_all(
+                "SELECT d.id, d.due_date, d.period, d.amount_cents, s.id AS student_id, "
+                "s.first_name, s.last_name, "
+                "COALESCE(SUM(CASE WHEN p.status = 'valid' THEN pd.amount_cents ELSE 0 END), 0) "
+                "AS paid_cents FROM dues d JOIN students s ON s.id = d.student_id "
+                "LEFT JOIN payment_dues pd ON pd.due_id = d.id "
+                "LEFT JOIN payments p ON p.id = pd.payment_id "
+                "WHERE d.due_date BETWEEN ? AND ? GROUP BY d.id "
+                "ORDER BY d.due_date, s.last_name_normalized, s.first_name_normalized",
+                (start_text, end_text),
+            )
+            events = []
+            today = self.today()
+            for row in rows:
+                paid = int(row["paid_cents"])
+                amount = int(row["amount_cents"])
+                status = (
+                    "Pagada"
+                    if paid >= amount
+                    else "Vencida"
+                    if overdue_on(date.fromisoformat(row["due_date"])) <= today
+                    else "Pendiente"
+                )
+                events.append(
+                    {
+                        "date": date.fromisoformat(row["due_date"]),
+                        "category": category,
+                        "title": f"{row['first_name']} {row['last_name']}",
+                        "details": f"Cuota {row['period']} · {status}",
+                        "amount_cents": amount,
+                        "student_id": int(row["student_id"]),
+                    }
+                )
+            return events
+        if category == "cobros":
+            rows = self.db.fetch_all(
+                "SELECT p.id, substr(p.paid_at, 1, 10) AS paid_date, p.total_cents, p.method, "
+                "p.status, GROUP_CONCAT(DISTINCT s.first_name || ' ' || s.last_name) AS students "
+                "FROM payments p JOIN payment_dues pd ON pd.payment_id = p.id "
+                "JOIN dues d ON d.id = pd.due_id JOIN students s ON s.id = d.student_id "
+                "WHERE substr(p.paid_at, 1, 10) BETWEEN ? AND ? GROUP BY p.id "
+                "ORDER BY paid_date, p.id",
+                (start_text, end_text),
+            )
+            return [
+                {
+                    "date": date.fromisoformat(row["paid_date"]),
+                    "category": category,
+                    "title": str(row["students"] or "Cobro"),
+                    "details": f"{row['method']} · "
+                    f"{'Válido' if row['status'] == 'valid' else 'Anulado'}",
+                    "amount_cents": int(row["total_cents"]),
+                    "student_id": None,
+                }
+                for row in rows
+            ]
+        rows = self.db.fetch_all(
+            "SELECT h.event_date, h.event_type, s.id AS student_id, s.first_name, s.last_name "
+            "FROM student_history h JOIN students s ON s.id = h.student_id "
+            "WHERE h.event_date BETWEEN ? AND ? "
+            "AND h.event_type IN ('alta', 'baja', 'reactivacion') "
+            "ORDER BY h.event_date, h.id",
+            (start_text, end_text),
+        )
+        labels = {"alta": "Alta", "baja": "Baja", "reactivacion": "Reactivación"}
+        return [
+            {
+                "date": date.fromisoformat(row["event_date"]),
+                "category": category,
+                "title": f"{row['first_name']} {row['last_name']}",
+                "details": labels[str(row["event_type"])],
+                "amount_cents": None,
+                "student_id": int(row["student_id"]),
+            }
+            for row in rows
+        ]
+
     def void_payment(self, actor: Actor, payment_id: int, reason: str) -> None:
         self._require_owner(actor)
         reason = " ".join(reason.split())
@@ -835,3 +981,37 @@ def _lastrowid(cursor: sqlite3.Cursor) -> int:
     if cursor.lastrowid is None:
         raise RuntimeError("SQLite no devolvió el identificador de la fila insertada.")
     return cursor.lastrowid
+
+
+def _billing_cycles(
+    *,
+    enrollment: date,
+    operational_start: date,
+    history: Sequence[sqlite3.Row],
+    active: bool,
+    inactive_on: date | None,
+    through: date,
+) -> list[tuple[date, date]]:
+    # The deactivation month remains billable; reactivation starts a new cycle after any gap.
+    cycles: list[tuple[date, date]] = []
+    cycle_start = enrollment
+    cycle_active = True
+    for event in history:
+        event_date = date.fromisoformat(event["event_date"])
+        if event["event_type"] == "baja" and cycle_active:
+            cycles.append((cycle_start, min(event_date, through)))
+            cycle_active = False
+        elif event["event_type"] == "reactivacion" and not cycle_active:
+            cycle_start = event_date
+            cycle_active = True
+
+    if cycle_active:
+        cycle_end = through if active else min(inactive_on or through, through)
+        cycles.append((cycle_start, cycle_end))
+    lower = month_start(max(enrollment, operational_start))
+    upper = month_start(through)
+    return [
+        (max(start, lower), end)
+        for start, end in cycles
+        if month_start(max(start, lower)) <= min(month_start(end), upper)
+    ]

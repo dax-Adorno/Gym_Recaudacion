@@ -183,9 +183,7 @@ class StudentsPage(QWidget):
         self.deactivate_button.clicked.connect(self.deactivate)
         self.reactivate_button = QPushButton("Reactivar")
         self.reactivate_button.setObjectName("textButton")
-        self.reactivate_button.setToolTip(
-            "Pendiente acordar vencimiento e importe de reactivación."
-        )
+        self.reactivate_button.setToolTip("Reactiva al alumno y genera la cuota completa del mes.")
         self.reactivate_button.clicked.connect(self.reactivate)
         owner_actions.addWidget(self.deactivate_button)
         owner_actions.addWidget(self.reactivate_button)
@@ -338,7 +336,6 @@ class StudentsPage(QWidget):
         self.reactivate_button.setVisible(
             self.actor.role == Role.OWNER and not bool(student["active"])
         )
-        self.reactivate_button.setEnabled(False)
 
     def _clear_detail(self) -> None:
         if not hasattr(self, "detail_name"):
@@ -457,7 +454,22 @@ class StudentsPage(QWidget):
     def reactivate(self) -> None:
         if self.selected_id is None:
             return
+        reactivation_date = self.service.today().strftime("%d/%m/%Y")
+        answer = QMessageBox.question(
+            self,
+            "Reactivar alumno",
+            f"Se reactivará desde el {reactivation_date} y se generará una cuota completa "
+            "para este mes. Los meses inactivos no se cobrarán. ¿Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
         try:
             self.service.reactivate_student(self.actor, self.selected_id)
         except DomainError as error:
-            QMessageBox.information(self, "Decisión pendiente", str(error))
+            QMessageBox.warning(self, "No se pudo reactivar", str(error))
+            return
+        self.filter.setCurrentText("Todos")
+        self.changed.emit()
+        self.refresh()
