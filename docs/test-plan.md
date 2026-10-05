@@ -10,6 +10,7 @@
 - Cobro de cuotas completas, adelantos identificados por período, reintentos, rollback y método de pago.
 - Panel: ingreso por fecha de cobro separado de aplicación por período de cuota, pendientes, anulaciones excluidas y acceso solo del dueño.
 - Calendario mensual: vencimientos, cobros y movimientos, fechas de negocio y acceso solo del dueño.
+- Identidad visual: logo del gimnasio en el acceso y enlace clicable del crédito DAX.
 - Informes PDF/XLSX: conciliación de importes, cuotas sin datos, descuentos, medios, anulaciones y DNI/teléfono como texto; textos que parecen fórmulas no se ejecutan.
 - Respaldo/restauración: SQLite consistente, retención configurable (30 por defecto), acceso solo del dueño, snapshot previo a migración, rechazo de archivo incompatible/dañado y rollback ante fallo de reemplazo.
 - Inspección manual pendiente de UI Qt y flujo con mouse/teclado; estos tests no acreditan empaquetado Windows.

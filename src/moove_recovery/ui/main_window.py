@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QFont
+from pathlib import Path
+
+from PySide6.QtCore import QSize, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -70,6 +72,15 @@ class MainWindow(QMainWindow):
         user.setObjectName("userInfo")
         user.setWordWrap(True)
         side_layout.addWidget(user)
+        self.creator_button = QPushButton("Creado por DAX")
+        self.creator_button.setObjectName("creatorCredit")
+        self.creator_button.setAccessibleName("Creado por DAX. Abrir Instagram")
+        self.creator_button.setToolTip("Abrir Instagram de DAX")
+        dax_logo = Path(__file__).resolve().parents[3] / "assets" / "branding" / "dax.png"
+        self.creator_button.setIcon(QIcon(str(dax_logo)))
+        self.creator_button.setIconSize(QSize(34, 34))
+        self.creator_button.clicked.connect(self.open_creator_instagram)
+        side_layout.addWidget(self.creator_button)
         version = QLabel(f"Versión {__version__}")
         version.setObjectName("muted")
         side_layout.addWidget(version)
@@ -163,6 +174,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "dashboard_page"):
             self.dashboard_page.refresh()
 
+    @staticmethod
+    def open_creator_instagram() -> None:
+        QDesktopServices.openUrl(QUrl("https://www.instagram.com/daxadorno/"))
+
     def refresh_if_day_changed(self) -> None:
         today = self.service.today()
         if today == self.last_business_day:
@@ -179,11 +194,13 @@ class MainWindow(QMainWindow):
 
 
 APP_STYLES = """
-QMainWindow, QWidget { background: #ffffff; color: #26322b; }
+QMainWindow, QDialog { background: #ffffff; color: #26322b; }
+QWidget { color: #26322b; }
 QFrame#sidebar { background: #172f42; color: #edf3f5; }
 QLabel#brand { color: #ffffff; font-size: 15px; font-weight: 800; }
 QLabel#sideLabel { color: #9aadb8; font-size: 9px; font-weight: 700; padding-left: 7px; }
-QLabel#sidebar, QFrame#sidebar QLabel { color: #e8eff1; }
+QFrame#sidebar QLabel { background: transparent; color: #e8eff1; }
+QFrame#sidebar QLabel#muted { color: #b7c4ca; }
 QFrame#topbar { background: #ffffff; border-bottom: 1px solid #e7ece8; min-height: 48px; }
 QFrame#topbar QLabel { color: #65736a; font-size: 10px; }
 QPushButton#navButton { background: transparent; color: #d4e0e3; border: 0; border-radius: 4px; padding: 8px 9px; text-align: left; }
@@ -191,6 +208,9 @@ QPushButton#navButton:hover { background: #254357; }
 QPushButton#navButton:checked { background: #31546a; color: #ffffff; font-weight: 700; }
 QLabel#userInfo { border-top: 1px solid #385063; padding: 11px 5px 5px; color: #ffffff; font-weight: 600; }
 QLabel#muted { color: #85918a; font-size: 10px; }
+QFrame#sidebar QLabel#muted { color: #b7c4ca; }
+QPushButton#creatorCredit { background: transparent; border: 0; color: #e8eff1; padding: 6px 3px; text-align: left; }
+QPushButton#creatorCredit:hover { background: #254357; border-radius: 3px; }
 QLabel#pageTitle { color: #24332b; font-size: 20px; font-weight: 700; }
 QLabel#detailTitle { color: #24332b; font-size: 15px; font-weight: 700; }
 QLabel#sectionTitle { color: #31433a; font-size: 12px; font-weight: 700; }

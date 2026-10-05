@@ -2,11 +2,12 @@ from datetime import date
 
 from conftest import add_student
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QDesktopServices
 
 from moove_recovery.application.service import GymService
 from moove_recovery.ui.calendar_page import CalendarPage
 from moove_recovery.ui.dashboard_page import DashboardPage
-from moove_recovery.ui.dialogs import PaymentDialog
+from moove_recovery.ui.dialogs import LoginDialog, PaymentDialog
 from moove_recovery.ui.main_window import MainWindow
 from moove_recovery.ui.students_page import StudentsPage
 
@@ -111,6 +112,30 @@ def test_owner_can_reactivate_selected_inactive_student_from_detail(qtbot, envir
     assert page.selected_id == student_id
     assert not page.reactivate_button.isHidden()
     assert page.reactivate_button.isEnabled()
+
+
+def test_login_shows_gym_logo(qtbot, environment) -> None:
+    dialog = LoginDialog(environment["service"])
+    qtbot.addWidget(dialog)
+
+    assert dialog.gym_logo.pixmap() is not None
+    assert not dialog.gym_logo.pixmap().isNull()
+
+
+def test_creator_credit_opens_personal_instagram(qtbot, environment, monkeypatch) -> None:
+    window = MainWindow(environment["service"], environment["owner"])
+    qtbot.addWidget(window)
+    opened_urls: list[str] = []
+    monkeypatch.setattr(
+        QDesktopServices,
+        "openUrl",
+        lambda url: opened_urls.append(url.toString()),
+    )
+
+    assert not window.creator_button.icon().isNull()
+    window.creator_button.click()
+
+    assert opened_urls == ["https://www.instagram.com/daxadorno/"]
 
 
 def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environment) -> None:

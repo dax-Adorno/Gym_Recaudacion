@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from uuid import uuid4
 
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -27,6 +29,25 @@ from moove_recovery.domain.models import Actor
 from moove_recovery.ui.common import format_money, parse_money
 
 
+def _gym_logo() -> QLabel:
+    logo = QLabel()
+    logo.setObjectName("gymLogo")
+    logo.setAccessibleName("Logo de MOOVE RECOVERY")
+    logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    path = Path(__file__).resolve().parents[3] / "assets" / "branding" / "moove_recovery.png"
+    pixmap = QPixmap(str(path))
+    if not pixmap.isNull():
+        logo.setPixmap(
+            pixmap.scaled(
+                260,
+                190,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+    return logo
+
+
 class InitialSetupDialog(QDialog):
     def __init__(self, service: GymService) -> None:
         super().__init__()
@@ -34,9 +55,8 @@ class InitialSetupDialog(QDialog):
         self.setWindowTitle("Configuración inicial · MOOVE RECOVERY")
         self.setMinimumWidth(430)
         layout = QVBoxLayout(self)
-        title = QLabel("MOOVE RECOVERY")
-        title.setObjectName("dialogTitle")
-        layout.addWidget(title)
+        self.gym_logo = _gym_logo()
+        layout.addWidget(self.gym_logo)
         layout.addWidget(QLabel("Crea la cuenta del dueño e ingresa los precios vigentes reales."))
         self.full_name = QLineEdit()
         self.full_name.setPlaceholderText("Nombre y apellido")
@@ -95,9 +115,8 @@ class LoginDialog(QDialog):
         self.setWindowTitle("Iniciar sesión · MOOVE RECOVERY")
         self.setMinimumWidth(360)
         layout = QVBoxLayout(self)
-        title = QLabel("MOOVE RECOVERY")
-        title.setObjectName("dialogTitle")
-        layout.addWidget(title)
+        self.gym_logo = _gym_logo()
+        layout.addWidget(self.gym_logo)
         layout.addWidget(QLabel("Gestión de cuotas"))
         self.username = QLineEdit()
         self.username.setPlaceholderText("Usuario")
