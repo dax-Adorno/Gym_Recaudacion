@@ -30,6 +30,9 @@ moove-recovery = "moove_recovery.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"moove_recovery.infrastructure" = ["license_public.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

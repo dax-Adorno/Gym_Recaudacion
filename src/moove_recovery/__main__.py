@@ -9,7 +9,14 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from moove_recovery.application.service import GymService
 from moove_recovery.infrastructure.backups import BackupManager
 from moove_recovery.infrastructure.database import Database
+from moove_recovery.infrastructure.licensing import (
+    LicenseError,
+    LicenseStore,
+    bundled_public_key,
+    windows_machine_code,
+)
 from moove_recovery.infrastructure.paths import data_directory
+from moove_recovery.ui.activation import require_activation
 from moove_recovery.ui.dialogs import InitialSetupDialog, LoginDialog
 from moove_recovery.ui.main_window import APP_STYLES
 from moove_recovery.ui.session import SessionController
@@ -38,6 +45,20 @@ def main() -> int:
             "MOOVE RECOVERY ya está abierto",
             "Cierra la otra ventana antes de iniciar otra instancia.",
         )
+        return 1
+
+    try:
+        store = LicenseStore(
+            directory.parent / "activation" / "installed.license",
+            bundled_public_key(),
+            windows_machine_code(),
+        )
+        if not require_activation(store):
+            lock.unlock()
+            return 0
+    except LicenseError as error:
+        QMessageBox.critical(None, "Activacion no disponible", str(error))
+        lock.unlock()
         return 1
 
     service = GymService(Database(directory / "moove.sqlite3"))
