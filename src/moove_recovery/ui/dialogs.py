@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 from uuid import uuid4
 
 from PySide6.QtCore import QDate, Qt
@@ -27,6 +26,7 @@ from moove_recovery.application.service import GymService
 from moove_recovery.domain.errors import DomainError
 from moove_recovery.domain.models import Actor
 from moove_recovery.ui.common import format_money, parse_money
+from moove_recovery.ui.resources import branding_path
 
 
 def _gym_logo() -> QLabel:
@@ -34,7 +34,7 @@ def _gym_logo() -> QLabel:
     logo.setObjectName("gymLogo")
     logo.setAccessibleName("Logo de MOOVE RECOVERY")
     logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    path = Path(__file__).resolve().parents[3] / "assets" / "branding" / "moove_recovery.png"
+    path = branding_path("moove_recovery.png")
     pixmap = QPixmap(str(path))
     if not pixmap.isNull():
         logo.setPixmap(

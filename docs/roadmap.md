@@ -43,7 +43,12 @@
 ## H5 · Recuperación y distribución
 
 - [x] Logos del gimnasio y DAX en el acceso y firma personal clicable a Instagram.
-- [ ] Licencia offline Ed25519, branding restante e instalador Windows.
+- [x] Licencia offline Ed25519 por codigo Windows y emisor separado con clave privada cifrada fuera del repositorio.
+- [x] Activacion obligatoria antes de abrir datos o crear el administrador; almacenamiento atomico y clave publica incorporada.
+- [x] Ejecutable Windows generado con PyInstaller, logos incluidos y revision de archivos prohibidos.
+- [x] Prueba local del ejecutable con datos vacios: importar licencia real y llegar a configuracion inicial sin usuarios precargados.
+- [ ] Compilar instalador Windows; resolver herramienta/licencia de compilacion y avisos de distribucion.
+- [ ] Validar instalacion limpia sin Python ni internet, licencia de otra PC, actualizacion y desinstalacion.
 
 ## H6 · Cierre
 

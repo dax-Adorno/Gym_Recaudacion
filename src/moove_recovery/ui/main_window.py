@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import (
     QEasingCurve,
     QParallelAnimationGroup,
@@ -107,7 +105,9 @@ class MainWindow(QMainWindow):
         self.creator_button.setObjectName("creatorCredit")
         self.creator_button.setAccessibleName("Creado por DAX. Abrir Instagram")
         self.creator_button.setToolTip("Abrir Instagram de DAX")
-        dax_logo = Path(__file__).resolve().parents[3] / "assets" / "branding" / "dax.png"
+        from moove_recovery.ui.resources import branding_path
+
+        dax_logo = branding_path("dax.png")
         self.creator_button.setIcon(QIcon(str(dax_logo)))
         self.creator_button.setIconSize(QSize(34, 34))
         self.creator_button.clicked.connect(self.open_creator_instagram)

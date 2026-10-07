@@ -3,7 +3,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import re
+import tempfile
+from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -14,6 +17,57 @@ MAX_LICENSE_BYTES = 8192
 
 class LicenseError(ValueError):
     pass
+
+
+def bundled_public_key() -> bytes:
+    try:
+        key = bytes.fromhex(
+            Path(__file__).with_name("license_public.txt").read_text("ascii").strip()
+        )
+    except (OSError, ValueError) as error:
+        raise LicenseError(
+            "Esta distribucion aun no tiene configurada la clave publica de DAX."
+        ) from error
+    if len(key) != 32:
+        raise LicenseError("La clave publica de esta distribucion es invalida.")
+    return key
+
+
+class LicenseStore:
+    def __init__(self, path: Path, public_key: bytes, code: str) -> None:
+        self.path = path
+        self.public_key = public_key
+        self.code = code
+
+    def check(self) -> None:
+        try:
+            with self.path.open("rb") as stream:
+                raw = stream.read(MAX_LICENSE_BYTES + 1)
+        except OSError as error:
+            raise LicenseError("No se pudo leer una licencia instalada.") from error
+        validate_license(raw, self.public_key, self.code)
+
+    def install(self, source: Path) -> None:
+        try:
+            with source.open("rb") as stream:
+                raw = stream.read(MAX_LICENSE_BYTES + 1)
+            validate_license(raw, self.public_key, self.code)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=self.path.parent, delete=False) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.path)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+        except OSError as error:
+            raise LicenseError(
+                "No se pudo guardar la licencia. Los datos no fueron modificados."
+            ) from error
 
 
 def machine_code(machine_guid: str) -> str:
