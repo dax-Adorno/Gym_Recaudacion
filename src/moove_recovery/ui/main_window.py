@@ -142,6 +142,7 @@ class MainWindow(QMainWindow):
             self.backups_page.restored.connect(self.close)
             self.prices_page = PricesPage(service, actor)
             self.users_page = UsersPage(service, actor)
+            self.users_page.session_change_requested.connect(self.logout_requested.emit)
             self.page_widgets["Panel"] = self.dashboard_page
             self.page_widgets["Calendario"] = self.calendar_page
             self.page_widgets["Planes y precios"] = self.prices_page
@@ -276,6 +277,7 @@ class MainWindow(QMainWindow):
         elif page == "Usuarios" and hasattr(self, "users_page"):
             self.pages.removeWidget(self.users_page)
             self.users_page = UsersPage(self.service, self.actor)
+            self.users_page.session_change_requested.connect(self.logout_requested.emit)
             self.page_widgets["Usuarios"] = self.users_page
             self.pages.addWidget(self.users_page)
             self.pages.setCurrentWidget(self.users_page)

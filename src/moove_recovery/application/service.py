@@ -136,6 +136,13 @@ class GymService:
         password_hash = hash_password(password)
         now = self.now().isoformat(timespec="seconds")
         with self.db.transaction() as connection:
+            if (
+                connection.execute(
+                    "SELECT id FROM users WHERE username = ? COLLATE NOCASE", (username,)
+                ).fetchone()
+                is not None
+            ):
+                raise ValidationError("Ese nombre de usuario ya está registrado.")
             cursor = connection.execute(
                 "INSERT INTO users(username, full_name, password_hash, role, created_at) "
                 "VALUES (?, ?, ?, 'employee', ?)",
@@ -147,10 +154,84 @@ class GymService:
             )
             return user_id
 
-    def list_users(self, actor: Actor) -> list[dict[str, object]]:
+    def update_user(
+        self,
+        actor: Actor,
+        user_id: int,
+        *,
+        full_name: str,
+        username: str,
+        password: str | None = None,
+    ) -> None:
+        self._require_owner(actor)
+        full_name = " ".join(full_name.split())
+        username = username.strip()
+        if not full_name or not username:
+            raise ValidationError("Completa el nombre y el usuario.")
+        try:
+            password_hash = hash_password(password) if password is not None else None
+        except ValueError as error:
+            raise ValidationError(str(error)) from error
+        with self.db.transaction() as connection:
+            user = connection.execute(
+                "SELECT active FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if user is None or not user["active"]:
+                raise ValidationError("El usuario no existe o fue eliminado.")
+            if (
+                connection.execute(
+                    "SELECT id FROM users WHERE username = ? COLLATE NOCASE AND id != ?",
+                    (username, user_id),
+                ).fetchone()
+                is not None
+            ):
+                raise ValidationError("Ese nombre de usuario ya está registrado.")
+            connection.execute(
+                "UPDATE users SET full_name = ?, username = ?, "
+                "password_hash = COALESCE(?, password_hash) WHERE id = ?",
+                (full_name, username, password_hash, user_id),
+            )
+            self._audit(
+                connection,
+                actor.id,
+                "usuario_edicion",
+                "users",
+                user_id,
+                {"password_changed": password is not None},
+                self.now().isoformat(timespec="seconds"),
+            )
+
+    def delete_user(self, actor: Actor, user_id: int) -> None:
+        self._require_owner(actor)
+        with self.db.transaction() as connection:
+            user = connection.execute(
+                "SELECT role, active FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if user is None or not user["active"]:
+                raise ValidationError("El usuario no existe o ya fue eliminado.")
+            if user["role"] == Role.OWNER.value or user_id == actor.id:
+                raise ValidationError(
+                    "No se puede eliminar la cuenta del dueño ni la sesión actual."
+                )
+            connection.execute("UPDATE users SET active = 0 WHERE id = ?", (user_id,))
+            self._audit(
+                connection,
+                actor.id,
+                "usuario_eliminacion",
+                "users",
+                user_id,
+                {},
+                self.now().isoformat(timespec="seconds"),
+            )
+
+    def list_users(
+        self, actor: Actor, *, include_inactive: bool = False
+    ) -> list[dict[str, object]]:
         self._require_owner(actor)
         rows = self.db.fetch_all(
-            "SELECT id, username, full_name, role, active, created_at FROM users ORDER BY role, full_name"
+            "SELECT id, username, full_name, role, active, created_at FROM users "
+            "WHERE active = 1 OR ? = 1 ORDER BY role, full_name",
+            (int(include_inactive),),
         )
         return [dict(row) for row in rows]
 
@@ -324,6 +405,7 @@ class GymService:
     ) -> int:
         if actor.role not in {Role.OWNER, Role.EMPLOYEE}:
             raise PermissionDenied("No tienes permiso para dar de alta alumnos.")
+        self._require_active_actor(actor)
         first_name = " ".join(first_name.split())
         last_name = " ".join(last_name.split())
         dni = dni.strip()
@@ -651,6 +733,7 @@ class GymService:
     def prepare_future_dues(self, actor: Actor, student_id: int, through: date) -> dict[str, int]:
         if actor.role not in {Role.OWNER, Role.EMPLOYEE}:
             raise PermissionDenied("No tienes permiso para preparar cuotas.")
+        self._require_active_actor(actor)
         through = month_start(through)
         current_period = month_start(self.today())
         if through < current_period:
@@ -665,6 +748,7 @@ class GymService:
     def list_students(
         self, actor: Actor, *, query: str = "", filter_name: str = "Todos"
     ) -> list[dict[str, object]]:
+        self._require_active_actor(actor)
         if filter_name not in BUSINESS_FILTERS:
             raise ValidationError("Filtro de alumnos desconocido.")
         today = self.today()
@@ -784,6 +868,7 @@ class GymService:
     ) -> int:
         if actor.role not in {Role.OWNER, Role.EMPLOYEE}:
             raise PermissionDenied("No tienes permiso para registrar cobros.")
+        self._require_active_actor(actor)
         unique_due_ids = list(dict.fromkeys(int(value) for value in due_ids))
         if not unique_due_ids:
             raise ValidationError("Selecciona al menos una cuota completa.")
@@ -857,6 +942,7 @@ class GymService:
             return payment_id
 
     def list_student_history(self, actor: Actor, student_id: int) -> list[dict[str, object]]:
+        self._require_active_actor(actor)
         rows = self.db.fetch_all(
             "SELECT 'cuota' AS kind, d.id AS id, d.period AS date, d.amount_cents AS amount_cents, "
             "d.due_date AS detail, d.discount_source AS extra, "
@@ -1002,8 +1088,14 @@ class GymService:
             )
 
     def _require_owner(self, actor: Actor) -> None:
+        self._require_active_actor(actor)
         if actor.role != Role.OWNER:
             raise PermissionDenied("Esta acción está reservada al dueño.")
+
+    def _require_active_actor(self, actor: Actor) -> None:
+        user = self.db.fetch_one("SELECT role, active FROM users WHERE id = ?", (actor.id,))
+        if user is None or not user["active"] or user["role"] != actor.role.value:
+            raise PermissionDenied("La cuenta ya no tiene acceso. Inicia sesión nuevamente.")
 
     @staticmethod
     def _audit(

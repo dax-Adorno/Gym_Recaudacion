@@ -29,6 +29,7 @@ from moove_recovery.domain.errors import DomainError
 from moove_recovery.domain.models import Actor, Role
 from moove_recovery.ui.common import format_money, make_label
 from moove_recovery.ui.dialogs import PaymentDialog, StudentDialog
+from moove_recovery.ui.responsive_header import ResponsiveHeader
 
 STATE_COLORS = {
     "inactivo": ("#f0f1f1", "#666c72"),
@@ -93,6 +94,7 @@ class StudentsPage(QWidget):
         splitter.setHandleWidth(9)
         splitter.setChildrenCollapsible(False)
         self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeader(ResponsiveHeader(self.table))
         self.table.setMinimumWidth(340)
         self.table.setHorizontalHeaderLabels(
             ["ALUMNO", "DNI", "ACTIVIDAD", "PLAN", "ESTADO", "CUOTA ACTUAL"]
@@ -167,6 +169,7 @@ class StudentsPage(QWidget):
         fee_layout = QVBoxLayout(fee_page)
         fee_layout.setContentsMargins(0, 5, 0, 0)
         self.fee_table = QTableWidget(0, 3)
+        self.fee_table.setHorizontalHeader(ResponsiveHeader(self.fee_table))
         self.fee_table.setMinimumHeight(150)
         self.fee_table.setHorizontalHeaderLabels(["PERÍODO", "VENCE", "SALDO"])
         self.fee_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -178,6 +181,7 @@ class StudentsPage(QWidget):
         history_layout = QVBoxLayout(history_page)
         history_layout.setContentsMargins(0, 5, 0, 0)
         self.history_table = QTableWidget(0, 4)
+        self.history_table.setHorizontalHeader(ResponsiveHeader(self.history_table))
         self.history_table.setMinimumHeight(150)
         self.history_table.setHorizontalHeaderLabels(["FECHA", "MOVIMIENTO", "DETALLE", "IMPORTE"])
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -194,6 +198,8 @@ class StudentsPage(QWidget):
             header.setMinimumSectionSize(60)
             header.setMouseTracking(True)
         self.table.setColumnWidth(5, 125)
+        for table in (self.fee_table, self.history_table):
+            table.horizontalHeader().setMinimumSectionSize(95)
         self.history_table.itemSelectionChanged.connect(self.sync_void_button)
         history_layout.addWidget(self.history_table)
         self.void_payment_button = QPushButton("Anular cobro seleccionado")
@@ -438,7 +444,7 @@ class StudentsPage(QWidget):
             "paid": QStyle.StandardPixmap.SP_DialogApplyButton,
             "alta": QStyle.StandardPixmap.SP_MessageBoxInformation,
             "baja": QStyle.StandardPixmap.SP_MessageBoxWarning,
-            "voided": QStyle.StandardPixmap.SP_ArrowBack,
+            "voided": QStyle.StandardPixmap.SP_DialogCancelButton,
         }
         return self.style().standardIcon(icons[event])
 

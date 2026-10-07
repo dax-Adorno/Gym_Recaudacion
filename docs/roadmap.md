@@ -12,6 +12,7 @@
 
 - [x] Alta inicial del dueño y precios ingresados por el gimnasio.
 - [x] Login con hash Argon2id; creación de empleados; permisos en servicios.
+- [x] Edición de cuentas por el dueño y eliminación lógica de empleados, revocación de acceso y conservación de autoría histórica.
 - [x] Alta/edición de alumnos, actividad, DNI normalizado, búsqueda y filtros.
 - [x] Generación mensual idempotente y cuotas guardadas con importe/descuento.
 - [x] Cobro de cuotas completas en una transacción, periodos asociados e idempotencia.
