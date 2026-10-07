@@ -45,6 +45,14 @@
 - Los importes eliminados dejan de participar en los reportes. La acción no registra devolución de dinero.
 - Los respaldos anteriores no se modifican y pueden conservar una copia de los datos eliminados.
 
+## Administración de usuarios
+
+- Solo el dueño crea empleados y edita las cuentas activas, incluida la propia. Se editan nombre, usuario y contraseña; los roles se conservan.
+- La contraseña opcional vacía conserva el hash existente. Una contraseña nueva requiere al menos 12 caracteres. No se registran contraseñas ni hashes en la auditoría.
+- Eliminar una cuenta de empleado es una eliminación lógica (`active = 0`): revoca nuevos ingresos y las operaciones de actores anteriores, preservando referencias históricas de cobros, alumnos y auditoría.
+- Las cuentas eliminadas se ocultan por defecto y se pueden consultar con "Mostrar eliminados". Su nombre de usuario permanece reservado para evitar confundir autorías históricas.
+- Se impide eliminar la cuenta del dueño y la sesión actual. Editar la propia cuenta fuerza un nuevo inicio de sesión.
+
 ## Distribución
 
 PySide6 se distribuye bajo LGPLv3/GPLv3 o licencia comercial de Qt. Antes de crear un instalador se revisarán las condiciones de distribución de Qt y las licencias de las dependencias incluidas.

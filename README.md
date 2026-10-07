@@ -33,4 +33,6 @@ El dueño puede eliminar definitivamente un alumno y su historial desde su ficha
 
 "Cerrar sesión" vuelve al login para cambiar de usuario. La ventana anterior se cierra y se crea una nueva con los permisos del usuario autenticado; cancelar el nuevo login cierra el programa.
 
+En Usuarios, el dueño puede crear empleados y editar nombre, usuario y contraseña de cuentas activas. Dejar vacía la nueva contraseña conserva la anterior. Editar la propia cuenta vuelve al login. Eliminar un empleado revoca su acceso, incluso con una sesión previa, y conserva su identificación histórica; "Mostrar eliminados" permite consultar esas cuentas. La cuenta del dueño no se puede eliminar y los roles no se cambian desde este formulario.
+
 La especificación completa está en `docs/specification.md`. La interfaz Qt usa PySide6, distribuido bajo LGPLv3/GPLv3 o licencia comercial de Qt; revisar `docs/decisions.md` y los avisos de dependencias antes de distribuir.
