@@ -11,7 +11,8 @@ from moove_recovery.infrastructure.backups import BackupManager
 from moove_recovery.infrastructure.database import Database
 from moove_recovery.infrastructure.paths import data_directory
 from moove_recovery.ui.dialogs import InitialSetupDialog, LoginDialog
-from moove_recovery.ui.main_window import APP_STYLES, MainWindow
+from moove_recovery.ui.main_window import APP_STYLES
+from moove_recovery.ui.session import SessionController
 
 
 def main() -> int:
@@ -81,8 +82,8 @@ def main() -> int:
             f"No se generaron {result['without_price']} cuota(s) porque falta el precio de un plan.",
         )
 
-    window = MainWindow(service, login.actor)
-    window.show()
+    session = SessionController(service, app)
+    session.start(login.actor)
     app.aboutToQuit.connect(lock.unlock)
     return app.exec()
 

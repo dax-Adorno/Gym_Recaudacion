@@ -430,6 +430,58 @@ class GymService:
                 raise ValidationError("El alumno ya no existe.")
             self._audit(connection, actor.id, "alumno_edicion", "students", student_id, {}, now)
 
+    def delete_student(self, actor: Actor, student_id: int) -> None:
+        self._require_owner(actor)
+        now = self.now().isoformat(timespec="seconds")
+        with self.db.transaction() as connection:
+            if (
+                connection.execute("SELECT id FROM students WHERE id = ?", (student_id,)).fetchone()
+                is None
+            ):
+                raise ValidationError("El alumno no existe.")
+            payment_ids = [
+                int(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT pd.payment_id FROM payment_dues pd "
+                    "JOIN dues d ON d.id = pd.due_id WHERE d.student_id = ?",
+                    (student_id,),
+                ).fetchall()
+            ]
+            for payment_id in payment_ids:
+                shared = connection.execute(
+                    "SELECT 1 FROM payment_dues pd JOIN dues d ON d.id = pd.due_id "
+                    "WHERE pd.payment_id = ? AND d.student_id != ? LIMIT 1",
+                    (payment_id, student_id),
+                ).fetchone()
+                if shared is not None:
+                    raise DomainError(
+                        "No se puede eliminar: hay un cobro compartido con otro alumno."
+                    )
+            connection.execute(
+                "DELETE FROM audit_log WHERE entity_type = 'dues' AND entity_id IN "
+                "(SELECT id FROM dues WHERE student_id = ?)",
+                (student_id,),
+            )
+            connection.execute(
+                "DELETE FROM payment_dues WHERE due_id IN "
+                "(SELECT id FROM dues WHERE student_id = ?)",
+                (student_id,),
+            )
+            for payment_id in payment_ids:
+                connection.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
+                connection.execute(
+                    "DELETE FROM audit_log WHERE entity_type = 'payments' AND entity_id = ?",
+                    (payment_id,),
+                )
+            connection.execute("DELETE FROM dues WHERE student_id = ?", (student_id,))
+            connection.execute("DELETE FROM student_history WHERE student_id = ?", (student_id,))
+            connection.execute(
+                "DELETE FROM audit_log WHERE entity_type = 'students' AND entity_id = ?",
+                (student_id,),
+            )
+            connection.execute("DELETE FROM students WHERE id = ?", (student_id,))
+            self._audit(connection, actor.id, "alumno_eliminacion", "students", None, {}, now)
+
     def deactivate_student(self, actor: Actor, student_id: int) -> None:
         self._require_owner(actor)
         today = self.today()

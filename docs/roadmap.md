@@ -18,6 +18,10 @@
 - [x] Estados con prioridad y ficha con cuotas e historial.
 - [x] Baja lógica reservada al dueño; no borra pagos ni cuotas.
 - [x] Reactivación del mismo alumno: cuota completa desde el mes de reingreso, sin facturar meses inactivos.
+- [x] Cerrar sesión y cambiar de usuario con una ventana nueva y permisos del usuario autenticado.
+- [x] Eliminación definitiva reservada al dueño, confirmada y transaccional; no modifica otros alumnos ni respaldos anteriores.
+- [x] Navegación desplegable animada, iconos de movimientos y referencia rápida en la barra lateral.
+- [x] Cuota mensual visible independientemente del saldo; filas inactivas grises, separadores contrastados y tablas redimensionables con altura mínima.
 - [ ] Inspección visual manual de formularios en Windows pendiente.
 
 ## H3 · Operación avanzada
