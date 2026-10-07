@@ -3,6 +3,7 @@ from datetime import date
 from conftest import add_student
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QMessageBox
 
 from moove_recovery.application.service import GymService
 from moove_recovery.ui.calendar_page import CalendarPage
@@ -78,6 +79,38 @@ def test_dashboard_period_selector_refreshes_owner_metrics(qtbot, environment) -
     assert "Panel" not in employee_window.nav_buttons
     assert "Calendario" not in employee_window.nav_buttons
     assert "Respaldos" not in employee_window.nav_buttons
+    assert employee_window.students_page.delete_button.isHidden()
+
+
+def test_delete_student_requires_confirmation_and_removes_only_selection(
+    qtbot, environment, monkeypatch
+):
+    target = add_student(environment, name="Eliminar", dni="10000001")
+    remaining = add_student(environment, name="Conservar", dni="10000002")
+    service = environment["service"]
+    page = StudentsPage(service, environment["owner"])
+    qtbot.addWidget(page)
+    for row in range(page.table.rowCount()):
+        if page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) == target:
+            page.table.selectRow(row)
+            break
+    assert page.selected_id == target
+    prompts = []
+
+    def cancel(*args):
+        prompts.append(args)
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "warning", cancel)
+    page.delete_button.click()
+    assert len(service.list_students(environment["owner"])) == 2
+    assert "Eliminar Pérez" in prompts[0][2]
+    assert "10000001" in prompts[0][2]
+    assert prompts[0][-1] == QMessageBox.StandardButton.No
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: QMessageBox.StandardButton.Yes)
+    page.delete_button.click()
+    assert list(page.students) == [remaining]
+    assert page.selected_id == remaining
 
 
 def test_calendar_page_has_three_event_actions_and_month_navigation(qtbot, environment) -> None:
@@ -114,6 +147,47 @@ def test_owner_can_reactivate_selected_inactive_student_from_detail(qtbot, envir
     assert page.reactivate_button.isEnabled()
 
 
+def test_deactivation_preserves_other_students_dues_and_shows_fee_not_balance(
+    qtbot, environment, monkeypatch
+) -> None:
+    service = environment["service"]
+    owner = environment["owner"]
+    selected_id = add_student(environment, name="Baja", dni="10000001")
+    pending_id = add_student(environment, name="Pendiente", dni="10000002")
+    paid_id = add_student(environment, name="Pagado", dni="10000003")
+    service.generate_missing_dues()
+    paid_student = next(s for s in service.list_students(owner) if s["id"] == paid_id)
+    fee = paid_student["fees"][0]
+    service.record_payment(
+        owner,
+        student_id=paid_id,
+        due_ids=[fee["id"]],
+        total_cents=fee["amount_cents"],
+        method="efectivo",
+    )
+    before = {s["id"]: s for s in service.list_students(owner)}
+    page = StudentsPage(service, owner)
+    qtbot.addWidget(page)
+    for row in range(page.table.rowCount()):
+        if page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) == selected_id:
+            page.table.selectRow(row)
+            break
+    assert page.selected_id == selected_id
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes
+    )
+    page.deactivate_button.click()
+    after = {s["id"]: s for s in service.list_students(owner)}
+    assert not after[selected_id]["active"]
+    assert after[selected_id]["fees"] == before[selected_id]["fees"]
+    for student_id in (pending_id, paid_id):
+        assert after[student_id] == before[student_id]
+    for row in range(page.table.rowCount()):
+        assert page.table.item(row, 5).text() == "$ 30.000,00"
+        if page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) == paid_id:
+            assert "Saldo pendiente: $ 0,00" in page.table.item(row, 5).toolTip()
+
+
 def test_login_shows_gym_logo(qtbot, environment) -> None:
     dialog = LoginDialog(environment["service"])
     qtbot.addWidget(dialog)
@@ -136,6 +210,50 @@ def test_creator_credit_opens_personal_instagram(qtbot, environment, monkeypatch
     window.creator_button.click()
 
     assert opened_urls == ["https://www.instagram.com/daxadorno/"]
+
+
+def test_navigation_sections_expand_as_an_accordion(qtbot, environment) -> None:
+    window = MainWindow(environment["service"], environment["owner"])
+    qtbot.addWidget(window)
+
+    operation_toggle, operation_content, _ = window.nav_sections["OPERACIÓN"]
+    management_toggle, management_content, _ = window.nav_sections["GESTIÓN"]
+    admin_toggle, admin_content, _ = window.nav_sections["ADMINISTRACIÓN"]
+    qtbot.wait(240)
+
+    assert operation_toggle.isChecked()
+    assert operation_content.maximumHeight() > 0
+    assert not management_toggle.isChecked()
+
+    management_toggle.click()
+    qtbot.wait(240)
+    assert management_toggle.isChecked()
+    assert not operation_toggle.isChecked()
+    assert operation_content.maximumHeight() == 0
+    assert management_content.maximumHeight() > 0
+
+    admin_toggle.click()
+    qtbot.wait(240)
+    assert admin_toggle.isChecked()
+    assert not management_toggle.isChecked()
+    assert management_content.maximumHeight() == 0
+    assert admin_content.maximumHeight() > 0
+
+    window.nav_buttons["Calendario"].click()
+    qtbot.wait(240)
+    assert window.pages.currentWidget() is window.page_widgets["Calendario"]
+    assert management_toggle.isChecked()
+    assert not admin_toggle.isChecked()
+    assert admin_content.maximumHeight() == 0
+
+    management_toggle.click()
+    qtbot.wait(240)
+    assert management_content.maximumHeight() == 0
+    management_toggle.click()
+    qtbot.wait(40)
+    management_toggle.click()
+    qtbot.wait(240)
+    assert management_content.maximumHeight() == 0
 
 
 def test_payment_dialog_total_tracks_complete_period_selection(qtbot, environment) -> None:

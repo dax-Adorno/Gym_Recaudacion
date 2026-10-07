@@ -27,4 +27,10 @@ La primera apertura solicita crear el dueño y definir los precios reales de los
 
 El avance detallado y los pendientes están en `docs/roadmap.md`.
 
+En Alumnos, "Cuota actual" muestra el importe de la cuota mensual; su información emergente indica lo cobrado y el saldo pendiente. Una cuota cubierta conserva su importe. Dar de baja a un alumno conserva sus cuotas y cobros y no modifica los de otros alumnos.
+
+El dueño puede eliminar definitivamente un alumno y su historial desde su ficha, previa confirmación. Se eliminan también sus cuotas y cobros de los reportes; los demás alumnos y los respaldos existentes se conservan. Esta acción es distinta de la baja lógica y no registra una devolución de dinero.
+
+"Cerrar sesión" vuelve al login para cambiar de usuario. La ventana anterior se cierra y se crea una nueva con los permisos del usuario autenticado; cancelar el nuevo login cierra el programa.
+
 La especificación completa está en `docs/specification.md`. La interfaz Qt usa PySide6, distribuido bajo LGPLv3/GPLv3 o licencia comercial de Qt; revisar `docs/decisions.md` y los avisos de dependencias antes de distribuir.

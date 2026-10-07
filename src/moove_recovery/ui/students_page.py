@@ -3,17 +3,20 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -28,7 +31,7 @@ from moove_recovery.ui.common import format_money, make_label
 from moove_recovery.ui.dialogs import PaymentDialog, StudentDialog
 
 STATE_COLORS = {
-    "inactivo": ("#f0f1f1", "#58615c"),
+    "inactivo": ("#f0f1f1", "#666c72"),
     "deudor": ("#f9e5e1", "#a14436"),
     "por_vencer": ("#fff2d8", "#876314"),
     "pendiente": ("#f3f4f2", "#647069"),
@@ -86,7 +89,11 @@ class StudentsPage(QWidget):
         root.addLayout(tools)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("studentsSplitter")
+        splitter.setHandleWidth(9)
+        splitter.setChildrenCollapsible(False)
         self.table = QTableWidget(0, 6)
+        self.table.setMinimumWidth(340)
         self.table.setHorizontalHeaderLabels(
             ["ALUMNO", "DNI", "ACTIVIDAD", "PLAN", "ESTADO", "CUOTA ACTUAL"]
         )
@@ -106,14 +113,40 @@ class StudentsPage(QWidget):
         self.detail = QFrame()
         self.detail.setObjectName("detailPanel")
         self.detail.setMinimumWidth(280)
-        self.detail.setMaximumWidth(390)
         details_layout = QVBoxLayout(self.detail)
         details_layout.setContentsMargins(16, 15, 16, 15)
         details_layout.setSpacing(9)
         self.detail_name = make_label("Selecciona un alumno", "detailTitle")
         self.detail_state = make_label("", "muted")
+        self.detail_state.setWordWrap(True)
+        self.detail_status_icon = make_label("")
+        self.detail_status_icon.setFixedSize(20, 20)
+        self.detail_status_icon.hide()
+        status_layout = QHBoxLayout()
+        status_layout.setSpacing(7)
+        status_layout.addWidget(self.detail_status_icon, 0, Qt.AlignmentFlag.AlignTop)
+        status_layout.addWidget(self.detail_state, 1)
         details_layout.addWidget(self.detail_name)
-        details_layout.addWidget(self.detail_state)
+        details_layout.addLayout(status_layout)
+        legend = QFrame()
+        legend.setObjectName("statusLegend")
+        legend_layout = QVBoxLayout(legend)
+        legend_layout.setContentsMargins(0, 7, 0, 7)
+        legend_layout.setSpacing(4)
+        for event, description in (
+            ("paid", "Cuota pagada"),
+            ("alta", "Alta / reingreso"),
+            ("baja", "Baja / vencido"),
+            ("voided", "Cobro anulado"),
+        ):
+            legend_row = QHBoxLayout()
+            icon_label = make_label("")
+            icon_label.setFixedSize(18, 18)
+            icon_label.setPixmap(self._event_icon(event).pixmap(18, 18))
+            legend_row.addWidget(icon_label)
+            legend_row.addWidget(make_label(description, "muted"), 1)
+            legend_layout.addLayout(legend_row)
+        self.status_legend = legend
         self.detail_form = QFormLayout()
         self.detail_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         self.name_value = make_label("—")
@@ -134,6 +167,7 @@ class StudentsPage(QWidget):
         fee_layout = QVBoxLayout(fee_page)
         fee_layout.setContentsMargins(0, 5, 0, 0)
         self.fee_table = QTableWidget(0, 3)
+        self.fee_table.setMinimumHeight(150)
         self.fee_table.setHorizontalHeaderLabels(["PERÍODO", "VENCE", "SALDO"])
         self.fee_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.fee_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -144,12 +178,22 @@ class StudentsPage(QWidget):
         history_layout = QVBoxLayout(history_page)
         history_layout.setContentsMargins(0, 5, 0, 0)
         self.history_table = QTableWidget(0, 4)
+        self.history_table.setMinimumHeight(150)
         self.history_table.setHorizontalHeaderLabels(["FECHA", "MOVIMIENTO", "DETALLE", "IMPORTE"])
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.history_table.verticalHeader().setVisible(False)
         self.history_table.horizontalHeader().setStretchLastSection(True)
+        for table in (self.table, self.fee_table, self.history_table):
+            table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+            table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+            header.setStretchLastSection(False)
+            header.setMinimumSectionSize(60)
+            header.setMouseTracking(True)
+        self.table.setColumnWidth(5, 125)
         self.history_table.itemSelectionChanged.connect(self.sync_void_button)
         history_layout.addWidget(self.history_table)
         self.void_payment_button = QPushButton("Anular cobro seleccionado")
@@ -166,7 +210,6 @@ class StudentsPage(QWidget):
         self.notes = make_label("", "muted")
         self.notes.setWordWrap(True)
         details_layout.addWidget(self.notes)
-        details_layout.addStretch(1)
         actions = QHBoxLayout()
         self.pay_button = QPushButton("Registrar cobro")
         self.pay_button.setObjectName("primaryButton")
@@ -188,7 +231,18 @@ class StudentsPage(QWidget):
         owner_actions.addWidget(self.deactivate_button)
         owner_actions.addWidget(self.reactivate_button)
         details_layout.addLayout(owner_actions)
-        splitter.addWidget(self.detail)
+        self.delete_button = QPushButton("Eliminar alumno")
+        self.delete_button.setObjectName("dangerButton")
+        self.delete_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        self.delete_button.setToolTip("Elimina definitivamente al alumno y todo su historial.")
+        self.delete_button.clicked.connect(self.delete_student)
+        details_layout.addWidget(self.delete_button)
+        self.detail_scroll = QScrollArea()
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.detail_scroll.setMinimumWidth(300)
+        self.detail_scroll.setWidget(self.detail)
+        splitter.addWidget(self.detail_scroll)
         splitter.setSizes([650, 330])
         root.addWidget(splitter, 1)
 
@@ -196,6 +250,7 @@ class StudentsPage(QWidget):
             self.edit_button.hide()
             self.deactivate_button.hide()
             self.reactivate_button.hide()
+            self.delete_button.hide()
             self.void_payment_button.hide()
         self.show_selected()
 
@@ -229,22 +284,29 @@ class StudentsPage(QWidget):
                 (fee for fee in fees if fee["period"] == self.service.today().strftime("%Y-%m")),
                 None,
             )
-            outstanding = int(current["outstanding_cents"]) if current else 0
             values = [
                 str(student["full_name"]),
                 str(student["dni"]),
                 str(student["activity"]),
                 f"{student['sessions_per_week']} veces",
                 str(student["state_label"]),
-                format_money(outstanding) if current else "—",
+                format_money(int(current["amount_cents"])) if current else "—",
             ]
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.ItemDataRole.UserRole, student_id)
                 cell.setBackground(QColor(background))
-                cell.setForeground(QColor(foreground if column == 4 else "#29332d"))
+                cell.setForeground(
+                    QColor(foreground if column == 4 or state == "inactivo" else "#29332d")
+                )
                 if column == 4:
                     cell.setToolTip(str(student["state_detail"]))
+                elif column == 5 and current:
+                    cell.setToolTip(
+                        f"Cuota: {format_money(int(current['amount_cents']))}\n"
+                        f"Cobrado: {format_money(int(current['paid_cents']))}\n"
+                        f"Saldo pendiente: {format_money(int(current['outstanding_cents']))}"
+                    )
                 self.table.setItem(row_number, column, cell)
         if selected_row >= 0:
             self.table.selectRow(selected_row)
@@ -265,8 +327,26 @@ class StudentsPage(QWidget):
         if student is None:
             return
         self.selected_id = student_id
+        self.delete_button.setVisible(self.actor.role == Role.OWNER)
+        self.delete_button.setEnabled(True)
         self.detail_name.setText(str(student["full_name"]))
         self.detail_state.setText(f"{student['state_label']} · {student['state_detail']}")
+        status_icons = {
+            "al_dia": (QStyle.StandardPixmap.SP_DialogApplyButton, "Cuota del período cubierta"),
+            "deudor": (QStyle.StandardPixmap.SP_MessageBoxWarning, "Pago vencido"),
+        }
+        status_icon = status_icons.get(str(student["state"]))
+        if status_icon is None:
+            self.detail_status_icon.clear()
+            self.detail_status_icon.hide()
+        else:
+            standard_icon, description = status_icon
+            self.detail_status_icon.setPixmap(
+                self.style().standardIcon(standard_icon).pixmap(20, 20)
+            )
+            self.detail_status_icon.setToolTip(description)
+            self.detail_status_icon.setAccessibleName(description)
+            self.detail_status_icon.show()
         self.name_value.setText(str(student["full_name"]))
         self.dni_value.setText(str(student["dni"]))
         self.phone_value.setText(str(student["phone"]))
@@ -286,7 +366,11 @@ class StudentsPage(QWidget):
                 else "Cubierta",
             ]
             for column, value in enumerate(values):
-                self.fee_table.setItem(row, column, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if column == 2 and not int(fee["outstanding_cents"]):
+                    item.setIcon(self._event_icon("paid"))
+                    item.setToolTip("Cuota cubierta por un cobro válido")
+                self.fee_table.setItem(row, column, item)
         history = self.service.list_student_history(self.actor, student_id)
         self.history_table.setRowCount(len(history))
         for row, movement in enumerate(history):
@@ -321,6 +405,18 @@ class StudentsPage(QWidget):
                 amount = "—"
             for column, value in enumerate((shown_date, description, detail, amount)):
                 item = QTableWidgetItem(value)
+                if column == 1:
+                    if kind == "pago":
+                        item.setIcon(self._event_icon("voided" if status == "voided" else "paid"))
+                    elif kind == "cuota" and int(movement["paid_cents"]) >= int(
+                        movement["amount_cents"]
+                    ):
+                        item.setIcon(self._event_icon("paid"))
+                    elif kind == "movimiento":
+                        event = str(movement["detail"])
+                        if event in {"alta", "reactivacion", "baja"}:
+                            item.setIcon(self._event_icon("baja" if event == "baja" else "alta"))
+                    item.setToolTip(description)
                 if kind == "pago" and column == 1:
                     item.setData(Qt.ItemDataRole.UserRole, int(movement["id"]))
                     item.setData(Qt.ItemDataRole.UserRole + 1, status)
@@ -337,12 +433,25 @@ class StudentsPage(QWidget):
             self.actor.role == Role.OWNER and not bool(student["active"])
         )
 
+    def _event_icon(self, event: str) -> QIcon:
+        icons = {
+            "paid": QStyle.StandardPixmap.SP_DialogApplyButton,
+            "alta": QStyle.StandardPixmap.SP_MessageBoxInformation,
+            "baja": QStyle.StandardPixmap.SP_MessageBoxWarning,
+            "voided": QStyle.StandardPixmap.SP_ArrowBack,
+        }
+        return self.style().standardIcon(icons[event])
+
     def _clear_detail(self) -> None:
         if not hasattr(self, "detail_name"):
             return
         self.selected_id = None
         self.detail_name.setText("Selecciona un alumno")
         self.detail_state.setText("")
+        self.delete_button.setEnabled(False)
+        self.delete_button.setVisible(self.actor.role == Role.OWNER)
+        self.detail_status_icon.clear()
+        self.detail_status_icon.hide()
         for label in (
             self.name_value,
             self.dni_value,
@@ -429,6 +538,33 @@ class StudentsPage(QWidget):
         if dialog.exec():
             self.changed.emit()
             self.refresh()
+
+    def delete_student(self) -> None:
+        student_id = self.selected_id
+        student = self.students.get(student_id) if student_id is not None else None
+        if student is None:
+            return
+        answer = QMessageBox.warning(
+            self,
+            "Eliminar alumno definitivamente",
+            f"Se eliminará a {student['full_name']} (DNI {student['dni']}) y todo su historial: "
+            "cuotas, cobros y movimientos.\n\n"
+            "También dejará de figurar en los reportes. Esta acción no se puede deshacer "
+            "desde la aplicación; los respaldos anteriores conservarán su copia.\n\n"
+            "¿Eliminar definitivamente?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.service.delete_student(self.actor, student_id)
+        except DomainError as error:
+            QMessageBox.warning(self, "No se pudo eliminar el alumno", str(error))
+            return
+        self.selected_id = None
+        self.changed.emit()
+        self.refresh()
 
     def deactivate(self) -> None:
         if self.selected_id is None:

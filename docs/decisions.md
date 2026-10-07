@@ -36,6 +36,15 @@
 - La auditoría conserva quién y cuándo anuló, el motivo y las cuotas afectadas.
 - Anular el registro no afirma que se haya realizado una devolución de dinero.
 
+## Eliminación definitiva de alumnos
+
+- Solicitud confirmada por el dueño: incorporar una acción distinta de la baja lógica.
+- Solo el rol dueño puede eliminar un alumno activo o inactivo, con confirmación explícita de nombre y DNI.
+- Se eliminan en una transacción el alumno, sus cuotas, aplicaciones, cobros válidos o anulados, movimientos y auditoría vinculada. Se conserva únicamente una constancia general de quién ejecutó una eliminación y cuándo, sin datos del alumno.
+- Los demás alumnos y sus cobros se conservan. Si un cobro está vinculado también a otro alumno, la operación se rechaza completa.
+- Los importes eliminados dejan de participar en los reportes. La acción no registra devolución de dinero.
+- Los respaldos anteriores no se modifican y pueden conservar una copia de los datos eliminados.
+
 ## Distribución
 
 PySide6 se distribuye bajo LGPLv3/GPLv3 o licencia comercial de Qt. Antes de crear un instalador se revisarán las condiciones de distribución de Qt y las licencias de las dependencias incluidas.

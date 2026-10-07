@@ -66,6 +66,8 @@ R08. Se pueden abonar meses futuros; cada pago debe identificar los períodos cu
 R09. Promoción de tres meses con descuento configurable y aplicado exclusivamente por dueño. No acumular con el 50 % del ingreso. Cuando hay descuento de ingreso, la promoción puede comenzar el mes siguiente.
 R10. Deuda acumulativa por cuotas impagas. No agregar recargos no autorizados.
 R11. La baja es lógica. Conserva pagos/deuda y detiene generación de nuevas cuotas desde el mes siguiente. Solo dueño puede hacerla.
+
+R11bis. Por solicitud posterior del dueño, se incorpora también eliminación definitiva, separada de la baja lógica. Solo dueño, previa confirmación con nombre y DNI: elimina alumno, cuotas, cobros, aplicaciones, movimientos y auditoría vinculada en una transacción. Conserva una constancia general de ejecución sin datos del alumno. No modifica otros alumnos ni respaldos existentes; los registros eliminados dejan de participar en reportes. Un cobro compartido con otro alumno bloquea la eliminación completa. No implica devolución de dinero.
 R12. Cambiar precios no recalcula cuotas históricas ni períodos ya abonados. Guardar precio base, descuento, importe final y origen del descuento en cada cuota.
 R13. Marcar pagado es consecuencia de registrar un cobro válido, nunca un interruptor independiente.
 R14. Registrar fecha de cobro, importe, medio, períodos, usuario y referencia interna. Una anulación mantiene registro, autor y motivo, y revierte su aplicación a cuotas en una transacción.

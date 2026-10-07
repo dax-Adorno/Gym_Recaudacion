@@ -2,16 +2,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, QTimer, QUrl
+from PySide6.QtCore import (
+    QEasingCurve,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +40,8 @@ from moove_recovery.ui.students_page import StudentsPage
 
 
 class MainWindow(QMainWindow):
+    logout_requested = Signal()
+
     def __init__(self, service: GymService, actor: Actor) -> None:
         super().__init__()
         self.service = service
@@ -54,24 +69,40 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(brand)
         side_layout.addWidget(QLabel("Gestión de cuotas"))
         side_layout.addSpacing(22)
-        side_layout.addWidget(self._side_label("OPERACIÓN"))
         self.nav_buttons: dict[str, QPushButton] = {}
         self.page_widgets: dict[str, QWidget] = {}
-        side_layout.addWidget(self._nav_button("Alumnos", "Alumnos"))
+        self.nav_sections: dict[str, tuple[QToolButton, QWidget, QGraphicsOpacityEffect]] = {}
+        self.section_animations: dict[str, QParallelAnimationGroup] = {}
+        self.page_sections: dict[str, str] = {}
+        self._add_nav_section(side_layout, "OPERACIÓN", [("Alumnos", "Alumnos")])
         if actor.role == Role.OWNER:
-            side_layout.addSpacing(15)
-            side_layout.addWidget(self._side_label("GESTIÓN"))
-            side_layout.addWidget(self._nav_button("Panel", "Panel"))
-            side_layout.addWidget(self._nav_button("Calendario", "Calendario"))
-            side_layout.addWidget(self._side_label("ADMINISTRACIÓN"))
-            side_layout.addWidget(self._nav_button("Planes y precios", "Planes y precios"))
-            side_layout.addWidget(self._nav_button("Respaldos", "Respaldos"))
-            side_layout.addWidget(self._nav_button("Usuarios", "Usuarios"))
+            self._add_nav_section(
+                side_layout,
+                "GESTIÓN",
+                [("Panel", "Panel"), ("Calendario", "Calendario")],
+            )
+            self._add_nav_section(
+                side_layout,
+                "ADMINISTRACIÓN",
+                [
+                    ("Planes y precios", "Planes y precios"),
+                    ("Respaldos", "Respaldos"),
+                    ("Usuarios", "Usuarios"),
+                ],
+            )
+        side_layout.addStretch(3)
+        legend_index = side_layout.count()
         side_layout.addStretch(1)
         user = QLabel(f"{actor.full_name}\n{'Dueño' if actor.role == Role.OWNER else 'Empleado'}")
         user.setObjectName("userInfo")
         user.setWordWrap(True)
         side_layout.addWidget(user)
+        self.logout_button = QPushButton("Cerrar sesión")
+        self.logout_button.setObjectName("creatorCredit")
+        self.logout_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowBack))
+        self.logout_button.setToolTip("Cerrar esta sesión e iniciar con otro usuario")
+        self.logout_button.clicked.connect(lambda: self.logout_requested.emit())
+        side_layout.addWidget(self.logout_button)
         self.creator_button = QPushButton("Creado por DAX")
         self.creator_button.setObjectName("creatorCredit")
         self.creator_button.setAccessibleName("Creado por DAX. Abrir Instagram")
@@ -100,6 +131,7 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(topbar)
         self.pages = QStackedWidget()
         self.students_page = StudentsPage(service, actor)
+        side_layout.insertWidget(legend_index, self.students_page.status_legend)
         self.students_page.changed.connect(self.refresh_pages)
         self.pages.addWidget(self.students_page)
         self.page_widgets["Alumnos"] = self.students_page
@@ -130,11 +162,89 @@ class MainWindow(QMainWindow):
         self.day_timer.timeout.connect(self.refresh_if_day_changed)
         self.day_timer.start()
 
-    @staticmethod
-    def _side_label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("sideLabel")
-        return label
+    def _add_nav_section(
+        self,
+        layout: QVBoxLayout,
+        title: str,
+        pages: list[tuple[str, str]],
+    ) -> None:
+        if title != "OPERACIÓN":
+            layout.addSpacing(9)
+        toggle = QToolButton()
+        toggle.setObjectName("sectionButton")
+        toggle.setText(title)
+        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toggle.setArrowType(Qt.ArrowType.RightArrow)
+        toggle.setCheckable(True)
+        toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        toggle.setMinimumHeight(32)
+
+        content = QWidget()
+        content.setObjectName("sectionContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(3)
+        for label, page in pages:
+            content_layout.addWidget(self._nav_button(label, page))
+            self.page_sections[page] = title
+
+        opacity = QGraphicsOpacityEffect(content)
+        opacity.setOpacity(0)
+        content.setGraphicsEffect(opacity)
+        content.setMaximumHeight(0)
+        toggle.clicked.connect(
+            lambda _checked=False, section=title: self._toggle_nav_section(section)
+        )
+        layout.addWidget(toggle)
+        layout.addWidget(content)
+        self.nav_sections[title] = (toggle, content, opacity)
+
+    def _toggle_nav_section(self, title: str) -> None:
+        toggle, _, _ = self.nav_sections[title]
+        self._set_nav_section_expanded(title, toggle.isChecked())
+
+    def _set_nav_section_expanded(self, title: str, expanded: bool) -> None:
+        toggle, content, opacity = self.nav_sections[title]
+        toggle.setChecked(expanded)
+        toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        if expanded:
+            for other_title, (other_toggle, _, _) in self.nav_sections.items():
+                if other_title != title and other_toggle.isChecked():
+                    self._set_nav_section_expanded(other_title, False)
+
+        previous = self.section_animations.get(title)
+        if previous is not None:
+            previous.stop()
+            previous.deleteLater()
+
+        start_height = min(content.maximumHeight(), content.sizeHint().height())
+        end_height = content.sizeHint().height() if expanded else 0
+        animation = QParallelAnimationGroup(self)
+        height_animation = QPropertyAnimation(content, b"maximumHeight", animation)
+        height_animation.setDuration(220)
+        height_animation.setStartValue(start_height)
+        height_animation.setEndValue(end_height)
+        height_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        opacity_animation = QPropertyAnimation(opacity, b"opacity", animation)
+        opacity_animation.setDuration(180)
+        opacity_animation.setStartValue(opacity.opacity())
+        opacity_animation.setEndValue(1.0 if expanded else 0.0)
+        opacity_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        animation.addAnimation(height_animation)
+        animation.addAnimation(opacity_animation)
+        animation.finished.connect(
+            lambda section=title, pane=content, opened=expanded: self._finish_section_animation(
+                section, pane, opened
+            )
+        )
+        self.section_animations[title] = animation
+        animation.start()
+
+    def _finish_section_animation(self, title: str, content: QWidget, expanded: bool) -> None:
+        content.setMaximumHeight(content.sizeHint().height() if expanded else 0)
+        animation = self.section_animations.pop(title, None)
+        if animation is not None:
+            animation.deleteLater()
 
     def _nav_button(self, text: str, page: str) -> QPushButton:
         button = QPushButton(text)
@@ -146,6 +256,7 @@ class MainWindow(QMainWindow):
 
     def _select_page(self, page: str) -> None:
         self.pages.setCurrentWidget(self.page_widgets[page])
+        self._set_nav_section_expanded(self.page_sections[page], True)
         for name, button in self.nav_buttons.items():
             button.setChecked(name == page)
         if page == "Alumnos":
@@ -201,6 +312,9 @@ QLabel#brand { color: #ffffff; font-size: 16px; font-weight: 800; }
 QLabel#sideLabel { color: #9aadb8; font-size: 10px; font-weight: 700; padding-left: 7px; }
 QFrame#sidebar QLabel { background: transparent; color: #e8eff1; }
 QFrame#sidebar QLabel#muted { color: #b7c4ca; }
+QToolButton#sectionButton { background: transparent; color: #e8eff1; border: 0; padding: 7px 4px; text-align: left; font-weight: 700; }
+QToolButton#sectionButton:hover, QToolButton#sectionButton:checked { color: #ffffff; }
+QWidget#sectionContent { background: transparent; }
 QFrame#topbar { background: #ffffff; border-bottom: 1px solid #e7ece8; min-height: 48px; }
 QFrame#topbar QLabel { color: #65736a; font-size: 11px; }
 QPushButton#navButton { background: transparent; color: #d4e0e3; border: 0; border-radius: 4px; padding: 8px 9px; text-align: left; }
@@ -225,8 +339,16 @@ QPushButton#secondaryButton { background: #ffffff; color: #405147; border: 1px s
 QPushButton#secondaryButton:hover { background: #f3f7f4; }
 QPushButton#textButton { background: transparent; border: 0; color: #66736b; padding: 5px; text-align: left; }
 QPushButton#textButton:hover { color: #a24e42; }
-QTableWidget { border: 1px solid #e4eae5; gridline-color: #edf0ed; selection-background-color: #e4efe7; selection-color: #27352d; alternate-background-color: #fafbfa; }
-QHeaderView::section { background: #f5f7f5; border: 0; border-bottom: 1px solid #e5eae6; padding: 8px 6px; color: #77827b; font-size: 10px; font-weight: 700; }
+QPushButton#dangerButton { background: #fff7f5; border: 1px solid #c98074; border-radius: 4px; color: #963c2f; padding: 7px 10px; }
+QPushButton#dangerButton:hover { background: #f9e5e1; border-color: #963c2f; }
+QPushButton#dangerButton:disabled { color: #8d9590; border-color: #dce4de; background: #f5f7f5; }
+QTableWidget { border: 1px solid #aab9b0; gridline-color: #b9c7bf; selection-background-color: #e4efe7; selection-color: #27352d; alternate-background-color: #fafbfa; }
+QHeaderView::section { background: #edf2ee; border: 0; border-right: 1px solid #aab9b0; border-bottom: 2px solid #94a89c; padding: 8px 6px; color: #4d6054; font-size: 10px; font-weight: 700; }
+QHeaderView::section:hover { background: #d5e5db; color: #203a2b; border-right: 2px solid #547461; }
+QSplitter#studentsSplitter::handle { background: #c0cdc5; border-left: 1px solid #94a89c; border-right: 1px solid #94a89c; }
+QSplitter#studentsSplitter::handle:hover { background: #82a18e; }
+QFrame#statusLegend { border-top: 1px solid #b9c7bf; border-bottom: 1px solid #b9c7bf; }
+QFrame#sidebar QFrame#statusLegend { border-top: 1px solid #587080; border-bottom: 1px solid #587080; }
 QTableWidget::item { padding: 5px; }
 QStatusBar { background: #ffffff; color: #78837c; border-top: 1px solid #e7ece8; }
 QLabel#dialogTitle { color: #19384a; font-size: 18px; font-weight: 800; padding-bottom: 3px; }
