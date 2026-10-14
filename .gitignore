@@ -21,6 +21,7 @@ backups/
 *.licence
 *.key
 *.pem
+CONTRASENA_PRIVADA.txt
 .env
 .env.*
 !example.env

@@ -37,7 +37,8 @@
 - [x] Gastos exclusivos del dueno: pagados por mes, pendientes actuales, edicion, pago completo y anulacion auditada.
 - [x] Resultado mensual cobros menos gastos pagados y detalle en PDF/XLSX; pendientes separados.
 - [x] Migracion de esquema 1 a 2 con respaldo previo y restauracion de copias antiguas compatible.
-- [ ] Reconstruir y validar instalador actualizado con Gastos antes de entregar al cliente.
+- [x] Instalador 2.0.1 reconstruido con Gastos y sin etiqueta BETA.
+- [ ] Validar instalacion y actualizacion del instalador 2.0.1 en la PC destino.
 
 - [x] Panel del dueño con selector mes/año, métricas A–C y torta cobrado aplicado vs pendiente.
 - [x] Detalle de cuotas/pagos y exportes PDF/XLSX con saldos, descuentos, medios y anulaciones identificadas.

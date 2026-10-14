@@ -1,4 +1,4 @@
 """MOOVE RECOVERY desktop application."""
 
-__version__ = "1.0.1b1"
-VERSION_LABEL = "BETA 1.0.1"
+__version__ = "2.0.1"
+VERSION_LABEL = "2.0.1"
