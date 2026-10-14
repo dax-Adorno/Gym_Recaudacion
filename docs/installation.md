@@ -1,4 +1,4 @@
-# Instalador Windows: BETA 1.0.1
+# Instalador Windows: Version 2.0.1
 
 Destino inicial: Windows 10/11 x64, una cuenta Windows compartida por operadores.
 Los roles dueno/empleado siguen siendo cuentas distintas dentro del programa.
@@ -35,8 +35,9 @@ y la licencia. Desinstalar elimina solo los archivos del programa; no se incluye
 ninguna instruccion de borrado de datos ni activacion. No borrar manualmente datos
 sin respaldo. No hay firma Authenticode: Windows puede advertir sobre editor desconocido.
 
-El programa muestra BETA 1.0.1 y el paquete Python identifica la entrega como
-1.0.1b1. Gastos actualiza el esquema de base a 2 con copia preventiva y
+El programa muestra Version 2.0.1 y el paquete Python identifica la entrega como
+2.0.1. Se retira la etiqueta BETA por solicitud del usuario; esto no sustituye
+las pruebas pendientes de distribucion. Gastos actualiza el esquema de base a 2 con copia preventiva y
 migracion; el formato y la clave de licencia se conservan.
 El desinstalador usa una lista generada de archivos del paquete y solo elimina
 carpetas vacias; no hace borrados recursivos ni elimina archivos agregados por el usuario.
@@ -64,3 +65,9 @@ La compilacion no acredita instalacion, actualizacion o desinstalacion: esas
 pruebas y la validacion en otra PC limpia siguen pendientes antes de entregar.
 Ese instalador fue generado antes de Gastos: no usarlo para instalar los cambios
 de este PR. Es necesario reconstruir y verificar una nueva entrega.
+
+Version 2.0.1: ejecutable y dist/installer/MOOVE_RECOVERY_2.0.1_Setup.exe
+reconstruidos con Gastos y ajustes visuales; compilacion PyInstaller/NSIS sin errores.
+137 pruebas aprobadas y licencia existente verificada con la misma clave publica.
+La etiqueta BETA ya no se muestra. Sigue pendiente la prueba integral de instalacion,
+actualizacion y desinstalacion de esta entrega en la PC destino y los avisos de distribucion.

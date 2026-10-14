@@ -1,0 +1,29 @@
+GENERADOR DE LICENCIAS DAX - MOOVE RECOVERY
+Uso privado del desarrollador. No entregar esta carpeta al cliente.
+
+1. Abrir GeneradorLicenciasDAX.exe.
+2. Pegar el codigo MR1 completo enviado por el cliente.
+3. Seleccionar la clave privada cifrada issuer.pem si no aparece seleccionada.
+4. Ingresar la contrasena que elegiste al crear esa clave.
+5. Pulsar Generar licencia y elegir donde guardar el archivo .license.
+6. Enviar SOLO el archivo .license. El cliente utiliza Importar licencia.
+
+El generador funciona offline y no necesita Python instalado.
+No crea ni reemplaza la clave privada. La clave publica de verificacion esta
+incluida para evitar emitir licencias con una clave equivocada.
+
+NO EXISTE UNA CONTRASENA MAESTRA UNIVERSAL DEL PROGRAMA.
+La contrasena protege issuer.pem. No se puede recuperar desde el archivo cifrado.
+LEEME.txt no contiene contrasenas. No guardarlas junto a la clave privada:
+quien consiga ambos podra emitir licencias.
+Si aun asi necesitas un TXT privado, usa el boton Guardar contrasena en TXT.
+Solicita confirmacion e ingreso local, verifica la clave y crea CONTRASENA_PRIVADA.txt
+al lado del ejecutable. No se genera automaticamente ni se incluye en el build.
+Esta opcion deja la contrasena en texto plano. Se recomienda un gestor de contrasenas.
+Conservar una copia segura de issuer.pem y la contrasena por separado.
+No reutilizar para la clave la contrasena de acceso del gimnasio.
+
+Para mover la herramienta, transportar el ejecutable y la clave cifrada de forma
+segura. No enviar ni publicar la clave privada, su contrasena o esta carpeta.
+Puede mostrar una advertencia de editor desconocido: el ejecutable no esta firmado
+con Authenticode. No desactivar el antivirus.

@@ -43,7 +43,8 @@ Verificacion: pruebas de permisos, validaciones, auditoria, cambio de mes,
 resultado con cobros/anulaciones, rollback, migracion, respaldo/restauracion,
 exportes y dialogos. La vista previa usa una base ficticia aislada.
 El instalador BETA 1.0.1 generado previamente NO incluye esta funcionalidad;
-hay que reconstruir y verificar una nueva entrega antes de actualizar al cliente.
+se reconstruyo el instalador 2.0.1 con Gastos. Falta verificar instalacion y
+actualizacion en la PC destino antes de usarlo como entrega definitiva.
 
 Los controles comparten estilos con mayor contraste: botones neutrales azul gris,
 acciones principales verdes, acciones peligrosas rojas, estados de hover/pulsacion,

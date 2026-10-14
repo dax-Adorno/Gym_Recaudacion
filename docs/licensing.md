@@ -53,3 +53,20 @@ Si falta la clave publica, el inicio muestra un error y NO permite operar.
 No hay clave de prueba incorporada, bypass por entorno ni clave privada distribuida.
 La pantalla y el circuito se prueban inyectando claves efimeras desde las pruebas.
 Pendiente tambien empaquetado y pruebas Windows sin Python y sin internet.
+
+## Emisor portatil privado
+
+tools/license_issuer/gui.py ofrece emision con ventana y verifica que la clave
+privada corresponda a la clave publica del producto. El build separado
+packaging/build_issuer.ps1 genera GeneradorLicenciasDAX.exe de un solo archivo.
+No contiene claves privadas ni contrasenas. LEEME.txt acompana la herramienta.
+La clave cifrada existente se conserva y se transporta separada del ejecutable.
+Nunca distribuir el emisor ni su carpeta privada al cliente.
+
+Por solicitud del desarrollador existe una opcion explicita para guardar una
+referencia de contrasena en texto plano al lado del emisor: requiere advertencia,
+confirmacion e ingreso local; verifica la contrasena y no sobrescribe archivos.
+CONTRASENA_PRIVADA.txt esta excluido de Git y nunca se incluye en builds.
+No se recomienda guardar ese TXT junto a issuer.pem: elimina la proteccion
+practica del cifrado ante quien consiga la carpeta. Preferir gestor de contrasenas.
+No existe contrasena maestra universal ni recuperacion de la clave cifrada.

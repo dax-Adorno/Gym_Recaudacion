@@ -20,7 +20,8 @@ def test_installer_does_not_delete_local_data():
     assert "RMDir /r" not in source
     assert "Delete /REBOOTOK" not in source
     assert "RequestExecutionLevel user" in source
-    assert "BETA 1.0.1" in source
+    assert "Version 2.0.1" in source
+    assert "BETA" not in source
 
 
 def test_uninstaller_manifest_deletes_only_bundle_files(tmp_path):
@@ -37,10 +38,10 @@ def test_uninstaller_manifest_deletes_only_bundle_files(tmp_path):
     assert "/r" not in output
 
 
-def test_beta_version_consistency():
+def test_release_version_consistency():
     from moove_recovery import VERSION_LABEL, __version__
 
-    assert VERSION_LABEL == "BETA 1.0.1"
-    assert __version__ == "1.0.1b1"
+    assert VERSION_LABEL == "2.0.1"
+    assert __version__ == "2.0.1"
     source = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     assert f'version = "{__version__}"' in source
