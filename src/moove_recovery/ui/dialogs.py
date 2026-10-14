@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from moove_recovery import VERSION_LABEL
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.errors import DomainError
 from moove_recovery.domain.models import Actor
@@ -52,7 +53,7 @@ class InitialSetupDialog(QDialog):
     def __init__(self, service: GymService) -> None:
         super().__init__()
         self.service = service
-        self.setWindowTitle("Configuración inicial · MOOVE RECOVERY")
+        self.setWindowTitle(f"Configuración inicial · MOOVE RECOVERY · {VERSION_LABEL}")
         self.setMinimumWidth(430)
         layout = QVBoxLayout(self)
         self.gym_logo = _gym_logo()
@@ -112,7 +113,7 @@ class LoginDialog(QDialog):
         super().__init__()
         self.service = service
         self.actor: Actor | None = None
-        self.setWindowTitle("Iniciar sesión · MOOVE RECOVERY")
+        self.setWindowTitle(f"Iniciar sesión · MOOVE RECOVERY · {VERSION_LABEL}")
         self.setMinimumWidth(360)
         layout = QVBoxLayout(self)
         self.gym_logo = _gym_logo()

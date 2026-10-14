@@ -39,6 +39,13 @@ def export_monthly_report_xlsx(report: ReportData, path: Path) -> None:
     overview.column_dimensions["A"].width = 38
     overview.column_dimensions["B"].width = 24
     _style_header(overview, 1, 2)
+    for label, key in [
+        ("Gastos pagados del mes", "expense_cents"),
+        ("Resultado: cobros menos gastos", "net_cents"),
+        ("Gastos pendientes actuales", "pending_expense_cents"),
+    ]:
+        overview.append([label, _excel_amount(summary.get(key, 0))])
+        overview.cell(overview.max_row, 2).number_format = MONEY_FORMAT
 
     dues = workbook.create_sheet("Cuotas")
     dues_headers = [
@@ -116,6 +123,23 @@ def export_monthly_report_xlsx(report: ReportData, path: Path) -> None:
         payments.cell(payments.max_row, 2).number_format = "dd/mm/yyyy hh:mm"
     _style_table(payments, [9, 22, 16, 18, 27, 28, 12, 32, 24, 18])
 
+    for title, key in [("Gastos pagados", "expenses"), ("Gastos pendientes", "pending_expenses")]:
+        sheet = workbook.create_sheet(title)
+        sheet.append(["Fecha", "Concepto", "Categoria", "Importe", "Medio", "Observaciones"])
+        for expense in report.get(key, []):
+            sheet.append(
+                [
+                    _excel_date(expense["paid_on"] or expense["scheduled_on"]),
+                    expense["concept"],
+                    expense["category"],
+                    _excel_amount(expense["amount_cents"]),
+                    _payment_method(expense["method"]) if expense["method"] else "",
+                    expense["notes"],
+                ]
+            )
+            sheet.cell(sheet.max_row, 1).number_format = "dd/mm/yyyy"
+            sheet.cell(sheet.max_row, 4).number_format = MONEY_FORMAT
+        _style_table(sheet, [16, 35, 22, 20, 22, 45])
     workbook.properties.title = f"MOOVE RECOVERY · Informe {summary['period']}"
     workbook.properties.subject = "Cuotas y cobranzas"
     workbook.save(path)
@@ -311,6 +335,40 @@ def export_monthly_report_pdf(report: ReportData, path: Path) -> None:
             65,
         ]
         story.append(_report_table(payment_rows, payment_widths, numeric_from=1))
+
+    story.append(Paragraph("Economia del mes", styles["ReportSection"]))
+    for label, key in [
+        ("Gastos pagados", "expense_cents"),
+        ("Resultado: cobros menos gastos", "net_cents"),
+        ("Gastos pendientes actuales (no descontados)", "pending_expense_cents"),
+    ]:
+        story.append(Paragraph(f"{label}: {_pesos(summary.get(key, 0))}", styles["BodyText"]))
+    for title, key in [
+        ("Gastos pagados del mes", "expenses"),
+        ("Gastos pendientes actuales", "pending_expenses"),
+    ]:
+        story.append(Paragraph(title, styles["ReportSection"]))
+        rows = [
+            [
+                _paragraph(value, styles)
+                for value in ["Fecha", "Concepto", "Categoria", "Importe", "Medio", "Observaciones"]
+            ]
+        ]
+        for expense in report.get(key, []):
+            rows.append(
+                [
+                    _short_date(expense["paid_on"] or expense["scheduled_on"]),
+                    _paragraph(expense["concept"], styles),
+                    _paragraph(expense["category"], styles),
+                    _pesos(expense["amount_cents"]),
+                    _payment_method(expense["method"]) if expense["method"] else "-",
+                    _paragraph(expense["notes"], styles),
+                ]
+            )
+        if len(rows) > 1:
+            story.append(_report_table(rows, [70, 170, 100, 80, 100, 185], numeric_from=3))
+        else:
+            story.append(Paragraph("Sin gastos registrados.", styles["BodyText"]))
 
     def draw_page(canvas: Any, document: Any) -> None:
         canvas.saveState()

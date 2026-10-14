@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 BILLING_POLICY_VERSION = "2"
 
 MIGRATION_1 = """
@@ -177,12 +177,33 @@ class Database:
                 except Exception:
                     connection.rollback()
                     raise
+            if version < 2:
+                try:
+                    connection.executescript(
+                        "BEGIN IMMEDIATE;\n"
+                        "CREATE TABLE expenses ("
+                        "id INTEGER PRIMARY KEY, concept TEXT NOT NULL, category TEXT NOT NULL, "
+                        "scheduled_on TEXT NOT NULL, amount_cents INTEGER NOT NULL "
+                        "CHECK(typeof(amount_cents) = 'integer' AND amount_cents > 0), "
+                        "status TEXT NOT NULL CHECK(status IN ('paid','pending','voided')), "
+                        "paid_on TEXT, method TEXT, notes TEXT NOT NULL DEFAULT '', "
+                        "created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL, "
+                        "void_reason TEXT, CHECK((status = 'paid' AND paid_on IS NOT NULL "
+                        "AND method IS NOT NULL AND method IN ('efectivo','transferencia','debito','credito','otro')) "
+                        "OR (status = 'pending' AND paid_on IS NULL AND method IS NULL) "
+                        "OR (status = 'voided' AND void_reason IS NOT NULL)));\n"
+                        "CREATE INDEX expenses_paid_date ON expenses(status, paid_on);\n"
+                        "PRAGMA user_version = 2;\nCOMMIT;"
+                    )
+                except Exception:
+                    connection.rollback()
+                    raise
             policy = connection.execute(
                 "SELECT value FROM settings WHERE key = 'billing_policy_version'"
             ).fetchone()
             if policy is None or policy[0] != BILLING_POLICY_VERSION:
                 has_dues = connection.execute("SELECT 1 FROM dues LIMIT 1").fetchone()
-                if has_dues:
+                if has_dues and not (0 < version < SCHEMA_VERSION):
                     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
                     backup = (
                         self.path.parent

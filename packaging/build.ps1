@@ -1,6 +1,6 @@
 param(
     [string]$Python = "python",
-    [string]$Iscc = ""
+    [string]$MakeNsis = ""
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -20,11 +20,14 @@ try {
     foreach ($asset in @("assets/branding/moove_recovery.png", "assets/branding/dax.png", "moove_recovery/infrastructure/license_public.txt")) {
         if (-not (Test-Path -LiteralPath (Join-Path "$bundle/_internal" $asset))) { throw "Falta recurso: $asset" }
     }
-    if ($Iscc) {
-        & $Iscc (Join-Path $PSScriptRoot "installer.iss")
+    if ($MakeNsis) {
+        & $Python (Join-Path $PSScriptRoot "uninstall_manifest.py")
+        if ($LASTEXITCODE -ne 0) { throw "Fallo la lista de desinstalacion." }
+        New-Item -ItemType Directory -Force -Path (Join-Path $root "dist/installer") | Out-Null
+        & $MakeNsis (Join-Path $PSScriptRoot "installer.nsi")
         if ($LASTEXITCODE -ne 0) { throw "Fallo el instalador." }
     } else {
-        Write-Output "Ejecutable creado. Falta compilar installer.iss con Inno Setup."
+        Write-Output "Ejecutable creado. Falta compilar installer.nsi con NSIS 3.13."
     }
 } finally {
     $env:PATH = $originalPath

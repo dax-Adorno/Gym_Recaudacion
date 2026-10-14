@@ -131,11 +131,19 @@ class DashboardPage(QWidget):
         self.applied_value = self._metric(metrics, "Aplicado a cuotas del período")
         self.pending_value = self._metric(metrics, "Pendiente del período")
         overview_layout.addLayout(metrics)
+        economy = QHBoxLayout()
+        self.expense_value = self._metric(economy, "Gastos pagados del mes")
+        self.net_value = self._metric(economy, "Resultado: cobros menos gastos")
+        self.pending_expense_value = self._metric(economy, "Gastos pendientes actuales")
+        overview_layout.addLayout(economy)
 
         breakdown = QHBoxLayout()
         breakdown.setSpacing(22)
         chart_column = QVBoxLayout()
-        chart_column.addWidget(make_label("Cuotas del período", "sectionTitle"))
+        self.chart_mode = QComboBox()
+        self.chart_mode.addItems(["Cobros y gastos pagados", "Cuotas del período"])
+        self.chart_mode.setAccessibleName("Contenido del grafico")
+        chart_column.addWidget(self.chart_mode)
         self.chart = PeriodPie()
         chart_column.addWidget(self.chart, 1, Qt.AlignmentFlag.AlignLeft)
         breakdown.addLayout(chart_column)
@@ -194,6 +202,7 @@ class DashboardPage(QWidget):
 
         self.month.currentIndexChanged.connect(self.refresh)
         self.year.valueChanged.connect(self.refresh)
+        self.chart_mode.currentIndexChanged.connect(self.update_chart)
         self.refresh()
 
     @staticmethod
@@ -202,7 +211,9 @@ class DashboardPage(QWidget):
         frame.setObjectName("detailPanel")
         content = QVBoxLayout(frame)
         content.setContentsMargins(12, 10, 12, 10)
-        content.addWidget(make_label(title, "muted"))
+        label = make_label(title, "muted")
+        label.setWordWrap(True)
+        content.addWidget(label)
         value = make_label("$ 0,00", "kpiValue")
         content.addWidget(value)
         layout.addWidget(frame, 1)
@@ -230,24 +241,50 @@ class DashboardPage(QWidget):
         self.summary = summary
         applied = int(summary["applied_cents"])
         pending = int(summary["pending_cents"])
-        total = int(summary["period_total_cents"])
         self.received_value.setText(format_money(int(summary["received_cents"])))
+        self.expense_value.setText(format_money(int(summary["expense_cents"])))
+        self.net_value.setText(format_money(int(summary["net_cents"])))
+        self.pending_expense_value.setText(format_money(int(summary["pending_expense_cents"])))
         self.applied_value.setText(format_money(applied))
         self.pending_value.setText(format_money(pending))
-        self.chart.set_values(applied, pending, total)
-        self.applied_legend.setText(f"Cobrado aplicado: {format_money(applied)}")
-        self.pending_legend.setText(f"Pendiente: {format_money(pending)}")
-        self.total_legend.setText(f"Total de cuotas: {format_money(total)}")
-        self.empty_label.setVisible(total == 0)
-        self.chart.setAccessibleDescription(
-            f"Cobrado aplicado {format_money(applied)}; pendiente {format_money(pending)}; "
-            f"total de cuotas {format_money(total)}."
-        )
+        net = int(summary["net_cents"])
+        color = "#b14842" if net < 0 else "#28734f" if net > 0 else "#19384a"
+        self.net_value.setStyleSheet(f"color: {color}; font-weight: 700")
+        self.update_chart()
         cutoff = date.fromisoformat(str(summary["cutoff_date"]))
         self.cutoff_label.setText(
             f"Corte: {cutoff.strftime('%d/%m/%Y')} · estado actual del período"
         )
         self._populate_tables(report)
+
+    def update_chart(self, *_args: object) -> None:
+        if not self.summary:
+            return
+        if self.chart_mode.currentIndex() == 0:
+            first = int(self.summary["received_cents"])
+            second = int(self.summary["expense_cents"])
+            total = int(self.summary["cash_flow_cents"])
+            first_text = f"Cobros recibidos: {format_money(first)}"
+            second_text = f"Gastos pagados: {format_money(second)}"
+            total_text = f"Movimientos registrados: {format_money(total)}"
+            empty_text = "Sin cobros ni gastos pagados en este mes"
+            self.chart.setAccessibleName("Grafico de cobros y gastos pagados")
+        else:
+            first = int(self.summary["applied_cents"])
+            second = int(self.summary["pending_cents"])
+            total = int(self.summary["period_total_cents"])
+            first_text = f"Cobrado aplicado: {format_money(first)}"
+            second_text = f"Cuotas pendientes: {format_money(second)}"
+            total_text = f"Total de cuotas: {format_money(total)}"
+            empty_text = "Sin cuotas registradas"
+            self.chart.setAccessibleName("Grafico de cobrado aplicado y cuotas pendientes")
+        self.chart.set_values(first, second, total)
+        self.applied_legend.setText(first_text)
+        self.pending_legend.setText(second_text)
+        self.total_legend.setText(total_text)
+        self.empty_label.setText(empty_text)
+        self.empty_label.setVisible(total == 0)
+        self.chart.setAccessibleDescription(f"{first_text}; {second_text}; {total_text}.")
 
     def _populate_tables(self, report: dict[str, object]) -> None:
         dues = report["dues"]

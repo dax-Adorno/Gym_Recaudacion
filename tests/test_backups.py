@@ -153,6 +153,7 @@ def test_database_migration_takes_snapshot_before_upgrade(environment, tmp_path)
         )
         connection.execute("DELETE FROM settings WHERE key = 'billing_policy_version'")
         connection.execute("PRAGMA user_version = 1")
+        connection.execute("DROP TABLE expenses")
     environment["service"].initialize()
 
     snapshots = list((environment["db"].path.parent / "backups").glob("pre-migration-*.sqlite3"))

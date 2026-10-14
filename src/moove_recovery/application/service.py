@@ -246,6 +246,151 @@ class GymService:
         )
         return [dict(row) for row in rows]
 
+    def save_expense(
+        self,
+        actor: Actor,
+        *,
+        concept: str,
+        category: str,
+        scheduled_on: date,
+        amount_cents: int,
+        paid_on: date | None = None,
+        method: str | None = None,
+        notes: str = "",
+        expense_id: int | None = None,
+        expected_status: str | None = None,
+    ) -> int:
+        self._require_owner(actor)
+        if not concept.strip() or not category.strip():
+            raise ValidationError("Completa concepto y categoria.")
+        if type(amount_cents) is not int or not 0 < amount_cents <= 9_000_000_000_000:
+            raise ValidationError("El importe debe ser positivo y expresado en centavos enteros.")
+        if paid_on is not None and (paid_on > self.today() or method not in PAYMENT_METHODS):
+            raise ValidationError("Selecciona fecha de pago no futura y medio valido.")
+        if paid_on is None and method is not None:
+            raise ValidationError("Un gasto pendiente no tiene medio de pago registrado.")
+        status = "paid" if paid_on else "pending"
+        now = self.now().isoformat()
+        with self.db.transaction() as connection:
+            before = None
+            values = (
+                concept.strip(),
+                category.strip(),
+                scheduled_on.isoformat(),
+                amount_cents,
+                status,
+                paid_on.isoformat() if paid_on else None,
+                method,
+                notes.strip(),
+            )
+            if expense_id is None:
+                cursor = connection.execute(
+                    "INSERT INTO expenses(concept,category,scheduled_on,amount_cents,status,paid_on,"
+                    "method,notes,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (*values, actor.id, now),
+                )
+                expense_id = int(cursor.lastrowid or 0)
+            else:
+                before = connection.execute(
+                    "SELECT * FROM expenses WHERE id = ?", (expense_id,)
+                ).fetchone()
+                if before is None or before["status"] == "voided":
+                    raise ValidationError("El gasto no existe o esta anulado.")
+                if expected_status is not None and before["status"] != expected_status:
+                    raise ValidationError(
+                        "El estado del gasto cambio. Cierra y vuelve a abrir la edicion."
+                    )
+                connection.execute(
+                    "UPDATE expenses SET concept=?,category=?,scheduled_on=?,amount_cents=?,"
+                    "status=?,paid_on=?,method=?,notes=? WHERE id=?",
+                    (*values, expense_id),
+                )
+            self._audit(
+                connection,
+                actor.id,
+                "gasto_edicion" if before else "gasto_alta",
+                "expenses",
+                expense_id,
+                {
+                    "before": dict(before) if before else None,
+                    "after": {
+                        "concept": concept.strip(),
+                        "category": category.strip(),
+                        "amount_cents": amount_cents,
+                        "paid_on": values[5],
+                        "status": status,
+                        "scheduled_on": values[2],
+                        "method": method,
+                        "notes": notes.strip(),
+                    },
+                },
+                now,
+            )
+        return expense_id
+
+    def pay_expense(self, actor: Actor, expense_id: int, *, paid_on: date, method: str) -> None:
+        self._require_owner(actor)
+        if paid_on > self.today() or method not in PAYMENT_METHODS:
+            raise ValidationError("Selecciona fecha de pago no futura y medio valido.")
+        with self.db.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE expenses SET status='paid',paid_on=?,method=? WHERE id=? AND status='pending'",
+                (paid_on.isoformat(), method, expense_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("El gasto ya fue pagado, esta anulado o no existe.")
+            self._audit(
+                connection,
+                actor.id,
+                "gasto_pago",
+                "expenses",
+                expense_id,
+                {"paid_on": paid_on.isoformat(), "method": method},
+                self.now().isoformat(),
+            )
+
+    def void_expense(self, actor: Actor, expense_id: int, reason: str) -> None:
+        self._require_owner(actor)
+        if not reason.strip():
+            raise ValidationError("Indica el motivo de anulacion.")
+        with self.db.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE expenses SET status='voided',void_reason=? WHERE id=? AND status!='voided'",
+                (reason.strip(), expense_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("El gasto no existe o ya esta anulado.")
+            self._audit(
+                connection,
+                actor.id,
+                "gasto_anulacion",
+                "expenses",
+                expense_id,
+                {"reason": reason.strip()},
+                self.now().isoformat(),
+            )
+
+    def list_expenses(
+        self, actor: Actor, *, status: str, period: str | None = None
+    ) -> list[dict[str, object]]:
+        self._require_owner(actor)
+        if status not in {"paid", "pending", "voided"}:
+            raise ValidationError("Estado de gasto invalido.")
+        if period is not None:
+            try:
+                parsed = date.fromisoformat(period + "-01")
+                if parsed.strftime("%Y-%m") != period:
+                    raise ValueError
+            except ValueError as error:
+                raise ValidationError("Periodo invalido.") from error
+        rows = self.db.fetch_all(
+            "SELECT * FROM expenses WHERE status=? "
+            "AND (? IS NULL OR substr(COALESCE(paid_on,scheduled_on),1,7)=?) "
+            "ORDER BY COALESCE(paid_on,scheduled_on) DESC,id DESC",
+            (status, period, period),
+        )
+        return [dict(row) for row in rows]
+
     def get_dashboard_summary(self, actor: Actor, year: int, month: int) -> dict[str, object]:
         self._require_owner(actor)
         if not 1 <= year <= 9999 or not 1 <= month <= 12:
@@ -274,6 +419,14 @@ class GymService:
             ") paid ON paid.due_id = d.id WHERE d.period = ?",
             (period,),
         )
+        expenses = self.db.fetch_one(
+            "SELECT COALESCE(SUM(CASE WHEN status='paid' AND substr(paid_on,1,7)=? "
+            "THEN amount_cents ELSE 0 END),0), COALESCE(SUM(CASE WHEN status='pending' "
+            "THEN amount_cents ELSE 0 END),0) FROM expenses",
+            (period,),
+        )
+        received_cents = int(received[0]) if received else 0
+        expense_cents = int(expenses[0]) if expenses else 0
         return {
             "period": period,
             "cutoff_date": self.today().isoformat(),
@@ -282,6 +435,10 @@ class GymService:
             "pending_cents": int(dues[2]) if dues else 0,
             "period_total_cents": int(dues[1]) if dues else 0,
             "due_count": int(dues[0]) if dues else 0,
+            "expense_cents": expense_cents,
+            "pending_expense_cents": int(expenses[1]) if expenses else 0,
+            "net_cents": received_cents - expense_cents,
+            "cash_flow_cents": received_cents + expense_cents,
         }
 
     def get_monthly_report(self, actor: Actor, year: int, month: int) -> dict[str, object]:
@@ -326,7 +483,13 @@ class GymService:
             }
             for row in payment_rows
         ]
-        return {"summary": summary, "dues": dues, "payments": payments}
+        return {
+            "summary": summary,
+            "dues": dues,
+            "payments": payments,
+            "expenses": self.list_expenses(actor, status="paid", period=period),
+            "pending_expenses": self.list_expenses(actor, status="pending"),
+        }
 
     def create_backup(self, actor: Actor, destination: Path) -> Path:
         self._require_owner(actor)
@@ -968,9 +1131,41 @@ class GymService:
         self._require_owner(actor)
         if end < start:
             raise ValidationError("El final del calendario no puede preceder al inicio.")
-        if category not in {"vencimientos", "cobros", "movimientos"}:
+        if category not in {"vencimientos", "cobros", "movimientos", "gastos"}:
             raise ValidationError("Selecciona una categoría válida para el calendario.")
         start_text, end_text = start.isoformat(), end.isoformat()
+        if category == "gastos":
+            rows = self.db.fetch_all(
+                "SELECT id,concept,category,amount_cents,status,method,void_reason, "
+                "COALESCE(paid_on,scheduled_on) AS event_date FROM expenses "
+                "WHERE COALESCE(paid_on,scheduled_on) BETWEEN ? AND ? "
+                "ORDER BY event_date,id",
+                (start_text, end_text),
+            )
+            labels = {
+                "paid": "Gasto pagado",
+                "pending": "Gasto pendiente (fecha prevista)",
+                "voided": "Gasto anulado",
+            }
+            return [
+                {
+                    "date": date.fromisoformat(row["event_date"]),
+                    "category": category,
+                    "title": str(row["concept"]),
+                    "details": f"{labels[row['status']]} · {row['category']}"
+                    + (
+                        f" · {row['void_reason']}"
+                        if row["void_reason"]
+                        else f" · {row['method']}"
+                        if row["method"]
+                        else ""
+                    ),
+                    "amount_cents": int(row["amount_cents"]),
+                    "student_id": None,
+                    "expense_id": int(row["id"]),
+                }
+                for row in rows
+            ]
         if category == "vencimientos":
             rows = self.db.fetch_all(
                 "SELECT d.id, d.due_date, d.period, d.amount_cents, s.id AS student_id, "

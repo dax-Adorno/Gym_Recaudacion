@@ -84,6 +84,8 @@ class BackupManager:
         try:
             self._copy_database(source_path, staged_path)
             self.validate_backup(staged_path)
+            Database(staged_path).migrate()
+            self.validate_backup(staged_path)
             os.replace(active_path, rollback_path)
             original_moved = True
             for suffix in ("-wal", "-shm"):
@@ -136,7 +138,7 @@ class BackupManager:
         try:
             connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=5)
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            if version != SCHEMA_VERSION:
+            if not 1 <= version <= SCHEMA_VERSION:
                 raise BackupError("La copia tiene una versión de esquema incompatible.")
             tables = {
                 str(row[0])
@@ -146,6 +148,8 @@ class BackupManager:
             }
             if not REQUIRED_TABLES.issubset(tables):
                 raise BackupError("La copia no contiene todas las tablas de MOOVE RECOVERY.")
+            if version >= 2 and "expenses" not in tables:
+                raise BackupError("La copia no contiene la tabla de gastos.")
             setup = connection.execute(
                 "SELECT value FROM settings WHERE key = 'setup_complete'"
             ).fetchone()

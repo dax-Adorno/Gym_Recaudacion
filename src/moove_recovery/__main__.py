@@ -6,6 +6,7 @@ from PySide6.QtCore import QLockFile
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from moove_recovery import __version__
 from moove_recovery.application.service import GymService
 from moove_recovery.infrastructure.backups import BackupManager
 from moove_recovery.infrastructure.database import Database
@@ -25,6 +26,7 @@ from moove_recovery.ui.session import SessionController
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("MOOVE RECOVERY")
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("MOOVE RECOVERY")
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(APP_STYLES)

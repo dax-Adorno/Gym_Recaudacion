@@ -27,12 +27,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from moove_recovery import __version__
+from moove_recovery import VERSION_LABEL
 from moove_recovery.application.service import GymService
 from moove_recovery.domain.models import Actor, Role
 from moove_recovery.ui.backups_page import BackupsPage
 from moove_recovery.ui.calendar_page import CalendarPage
 from moove_recovery.ui.dashboard_page import DashboardPage
+from moove_recovery.ui.expenses_page import ExpensesPage
 from moove_recovery.ui.management_pages import PricesPage, UsersPage
 from moove_recovery.ui.students_page import StudentsPage
 
@@ -77,7 +78,7 @@ class MainWindow(QMainWindow):
             self._add_nav_section(
                 side_layout,
                 "GESTIÓN",
-                [("Panel", "Panel"), ("Calendario", "Calendario")],
+                [("Panel", "Panel"), ("Calendario", "Calendario"), ("Gastos", "Gastos")],
             )
             self._add_nav_section(
                 side_layout,
@@ -112,7 +113,7 @@ class MainWindow(QMainWindow):
         self.creator_button.setIconSize(QSize(34, 34))
         self.creator_button.clicked.connect(self.open_creator_instagram)
         side_layout.addWidget(self.creator_button)
-        version = QLabel(f"Versión {__version__}")
+        version = QLabel(f"Versión {VERSION_LABEL}")
         version.setObjectName("muted")
         side_layout.addWidget(version)
         shell_layout.addWidget(sidebar)
@@ -137,7 +138,12 @@ class MainWindow(QMainWindow):
         self.page_widgets["Alumnos"] = self.students_page
         if actor.role == Role.OWNER:
             self.dashboard_page = DashboardPage(service, actor)
+            self.expenses_page = ExpensesPage(service, actor)
+            self.expenses_page.changed.connect(self.dashboard_page.refresh)
+            self.page_widgets["Gastos"] = self.expenses_page
+            self.pages.addWidget(self.expenses_page)
             self.calendar_page = CalendarPage(service, actor)
+            self.expenses_page.changed.connect(self.calendar_page.refresh)
             self.backups_page = BackupsPage(service, actor)
             self.backups_page.restored.connect(self.close)
             self.prices_page = PricesPage(service, actor)
@@ -264,6 +270,8 @@ class MainWindow(QMainWindow):
             self.students_page.refresh()
         elif page == "Panel" and hasattr(self, "dashboard_page"):
             self.dashboard_page.refresh()
+        elif page == "Gastos" and hasattr(self, "expenses_page"):
+            self.expenses_page.refresh()
         elif page == "Calendario" and hasattr(self, "calendar_page"):
             self.calendar_page.refresh()
         elif page == "Respaldos" and hasattr(self, "backups_page"):
@@ -286,6 +294,7 @@ class MainWindow(QMainWindow):
         self.students_page.refresh()
         if hasattr(self, "dashboard_page"):
             self.dashboard_page.refresh()
+            self.expenses_page.refresh()
 
     @staticmethod
     def open_creator_instagram() -> None:
@@ -316,17 +325,24 @@ QFrame#sidebar QLabel { background: transparent; color: #e8eff1; }
 QFrame#sidebar QLabel#muted { color: #b7c4ca; }
 QToolButton#sectionButton { background: transparent; color: #e8eff1; border: 0; padding: 7px 4px; text-align: left; font-weight: 700; }
 QToolButton#sectionButton:hover, QToolButton#sectionButton:checked { color: #ffffff; }
+QToolButton#sectionButton:hover { background: #294a5d; border-radius: 4px; }
+QToolButton#sectionButton:pressed { background: #102737; }
+QToolButton#sectionButton:focus { background: #31546a; }
 QWidget#sectionContent { background: transparent; }
 QFrame#topbar { background: #ffffff; border-bottom: 1px solid #e7ece8; min-height: 48px; }
 QFrame#topbar QLabel { color: #65736a; font-size: 11px; }
 QPushButton#navButton { background: transparent; color: #d4e0e3; border: 0; border-radius: 4px; padding: 8px 9px; text-align: left; }
 QPushButton#navButton:hover { background: #254357; }
-QPushButton#navButton:checked { background: #31546a; color: #ffffff; font-weight: 700; }
+QPushButton#navButton:checked { background: #31546a; color: #ffffff; font-weight: 600; }
+QPushButton#navButton:pressed { background: #142c3d; color: #ffffff; }
+QPushButton#navButton:focus { background: #365e73; color: #ffffff; }
 QLabel#userInfo { border-top: 1px solid #385063; padding: 11px 5px 5px; color: #ffffff; font-weight: 600; }
 QLabel#muted { color: #85918a; font-size: 11px; }
 QFrame#sidebar QLabel#muted { color: #b7c4ca; }
 QPushButton#creatorCredit { background: transparent; border: 0; color: #e8eff1; padding: 6px 3px; text-align: left; }
 QPushButton#creatorCredit:hover { background: #254357; border-radius: 3px; }
+QPushButton#creatorCredit:pressed { background: #102737; }
+QPushButton#creatorCredit:focus { background: #31546a; }
 QLabel#pageTitle { color: #24332b; font-size: 21px; font-weight: 700; }
 QLabel#detailTitle { color: #24332b; font-size: 16px; font-weight: 700; }
 QLabel#sectionTitle { color: #31433a; font-size: 13px; font-weight: 700; }
@@ -334,16 +350,39 @@ QLabel#kpiValue { color: #19384a; font-size: 17px; font-weight: 700; }
 QFrame#detailPanel { background: #fbfcfb; border: 1px solid #e5eae6; border-radius: 5px; }
 QLineEdit, QComboBox, QDateEdit, QTextEdit, QListWidget { background: #ffffff; border: 1px solid #dfe6e1; border-radius: 4px; padding: 6px 8px; selection-background-color: #d9ebe0; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus { border: 1px solid #5a9876; }
-QPushButton#primaryButton { background: #276b4c; color: #ffffff; border: 1px solid #276b4c; border-radius: 4px; padding: 7px 11px; font-weight: 600; }
-QPushButton#primaryButton:hover { background: #1f583e; }
-QPushButton#primaryButton:disabled { background: #a7b9ae; border-color: #a7b9ae; }
-QPushButton#secondaryButton { background: #ffffff; color: #405147; border: 1px solid #dce4de; border-radius: 4px; padding: 6px 9px; }
-QPushButton#secondaryButton:hover { background: #f3f7f4; }
+QPushButton { background: #f1f5f8; color: #253d4d; border: 2px solid #8d9fa9; border-radius: 5px; padding: 7px 10px; font-weight: 600; min-height: 20px; }
+QPushButton:hover { background: #dbeaf4; border-color: #3c718d; color: #153b52; }
+QPushButton:pressed { background: #b7d3e4; border-color: #244e68; color: #12334a; }
+QPushButton:checked { background: #215a40; border-color: #123d2b; color: #ffffff; }
+QPushButton:checked:hover { background: #2d7252; }
+QPushButton:focus { border-color: #b67514; }
+QPushButton:disabled { background: #edf0f2; color: #6f7b82; border-color: #bcc6cb; }
+QPushButton#primaryButton { background: #215a40; color: #ffffff; border: 2px solid #123d2b; border-radius: 5px; padding: 7px 11px; font-weight: 600; }
+QPushButton#primaryButton:hover { background: #2d7252; border-color: #174931; }
+QPushButton#primaryButton:pressed { background: #163c2c; border-color: #0e291e; }
+QPushButton#primaryButton:focus { border-color: #b67514; }
+QPushButton#primaryButton:disabled { background: #dfe6e1; border-color: #b5c1ba; color: #69776f; }
+QPushButton#secondaryButton { background: #f1f5f8; color: #253d4d; border: 2px solid #8d9fa9; border-radius: 5px; padding: 7px 10px; }
+QPushButton#secondaryButton:hover { background: #dbeaf4; border-color: #3c718d; }
+QPushButton#secondaryButton:pressed { background: #b7d3e4; border-color: #244e68; }
+QPushButton#secondaryButton:focus { border-color: #b67514; }
+QPushButton#secondaryButton:disabled { background: #edf0f2; color: #6f7b82; border-color: #bcc6cb; }
 QPushButton#textButton { background: transparent; border: 0; color: #66736b; padding: 5px; text-align: left; }
 QPushButton#textButton:hover { color: #a24e42; }
-QPushButton#dangerButton { background: #fff7f5; border: 1px solid #c98074; border-radius: 4px; color: #963c2f; padding: 7px 10px; }
-QPushButton#dangerButton:hover { background: #f9e5e1; border-color: #963c2f; }
-QPushButton#dangerButton:disabled { color: #8d9590; border-color: #dce4de; background: #f5f7f5; }
+QPushButton#textButton:pressed { color: #752e25; background: #fae9e5; }
+QPushButton#textButton:focus { color: #752e25; background: #fae9e5; }
+QPushButton#textButton:disabled { color: #7d8781; background: transparent; }
+QPushButton#dangerButton { background: #fff0ec; border: 2px solid #ac5d50; border-radius: 5px; color: #85362b; padding: 7px 10px; }
+QPushButton#dangerButton:hover { background: #f6d7d0; border-color: #85362b; }
+QPushButton#dangerButton:pressed { background: #85362b; color: #ffffff; border-color: #61271f; }
+QPushButton#dangerButton:focus { border-color: #b67514; }
+QPushButton#dangerButton:disabled { color: #6f7b82; border-color: #bcc6cb; background: #edf0f2; }
+QTabWidget::pane { border: 1px solid #8d9fa9; background: #ffffff; }
+QTabBar::tab { background: #f1f5f8; color: #253d4d; border: 2px solid #8d9fa9; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 7px 12px; margin-right: 4px; min-height: 20px; min-width: 68px; font-weight: 600; }
+QTabBar::tab:hover { background: #dbeaf4; border-color: #3c718d; color: #153b52; }
+QTabBar::tab:selected { background: #215a40; color: #ffffff; border-color: #123d2b; }
+QTabBar::tab:selected:hover { background: #2d7252; }
+QTabBar::tab:disabled { background: #edf0f2; color: #6f7b82; border-color: #bcc6cb; }
 QTableWidget { border: 1px solid #aab9b0; gridline-color: #b9c7bf; selection-background-color: #e4efe7; selection-color: #27352d; alternate-background-color: #fafbfa; }
 QHeaderView::section { background: #edf2ee; border: 0; border-right: 1px solid #aab9b0; border-bottom: 2px solid #94a89c; padding: 8px 6px; color: #4d6054; font-size: 10px; font-weight: 700; }
 QHeaderView::section:hover { background: #d5e5db; color: #203a2b; border-right: 2px solid #547461; }

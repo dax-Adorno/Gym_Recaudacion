@@ -17,9 +17,21 @@ class ResponsiveHeader(QHeaderView):
         total = sum(widths)
         if available <= 0 or total <= 0:
             return
-        sizes = [max(self.minimumSectionSize(), available * width // total) for width in widths]
-        if sum(sizes) < available:
-            sizes[-1] += available - sum(sizes)
+        minimum = self.minimumSectionSize()
+        sizes = [minimum] * len(widths)
+        remaining = max(available, minimum * len(widths))
+        active = list(range(len(widths)))
+        while active:
+            weight = sum(widths[index] for index in active)
+            small = [index for index in active if remaining * widths[index] // weight < minimum]
+            if not small:
+                for index in active:
+                    sizes[index] = remaining * widths[index] // weight
+                sizes[active[-1]] += remaining - sum(sizes[index] for index in active)
+                break
+            for index in small:
+                remaining -= minimum
+                active.remove(index)
         self._resizing = True
         try:
             for index, size in enumerate(sizes):

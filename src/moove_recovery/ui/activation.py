@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from moove_recovery import VERSION_LABEL
 from moove_recovery.infrastructure.licensing import LicenseError, LicenseStore
 from moove_recovery.ui.dialogs import _gym_logo
 
@@ -20,7 +21,7 @@ class ActivationDialog(QDialog):
     def __init__(self, store: LicenseStore, reason: str) -> None:
         super().__init__()
         self.store = store
-        self.setWindowTitle("Activar MOOVE RECOVERY")
+        self.setWindowTitle(f"Activar MOOVE RECOVERY · {VERSION_LABEL}")
         self.resize(650, 360)
         layout = QVBoxLayout(self)
         layout.addWidget(_gym_logo())

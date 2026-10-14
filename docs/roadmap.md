@@ -34,6 +34,11 @@
 
 ## H4 · Panel e informes
 
+- [x] Gastos exclusivos del dueno: pagados por mes, pendientes actuales, edicion, pago completo y anulacion auditada.
+- [x] Resultado mensual cobros menos gastos pagados y detalle en PDF/XLSX; pendientes separados.
+- [x] Migracion de esquema 1 a 2 con respaldo previo y restauracion de copias antiguas compatible.
+- [ ] Reconstruir y validar instalador actualizado con Gastos antes de entregar al cliente.
+
 - [x] Panel del dueño con selector mes/año, métricas A–C y torta cobrado aplicado vs pendiente.
 - [x] Detalle de cuotas/pagos y exportes PDF/XLSX con saldos, descuentos, medios y anulaciones identificadas.
 - [x] Se omite el total agregado de deuda vencida (opcional); el detalle conserva saldos por cuota.
@@ -47,7 +52,9 @@
 - [x] Activacion obligatoria antes de abrir datos o crear el administrador; almacenamiento atomico y clave publica incorporada.
 - [x] Ejecutable Windows generado con PyInstaller, logos incluidos y revision de archivos prohibidos.
 - [x] Prueba local del ejecutable con datos vacios: importar licencia real y llegar a configuracion inicial sin usuarios precargados.
-- [ ] Compilar instalador Windows; resolver herramienta/licencia de compilacion y avisos de distribucion.
+- [x] Identificacion BETA 1.0.1 y script NSIS con desinstalacion limitada a archivos del paquete.
+- [x] Instalador BETA 1.0.1 compilado con NSIS 3.13, sin errores.
+- [ ] Probar instalador Windows y completar avisos de distribucion.
 - [ ] Validar instalacion limpia sin Python ni internet, licencia de otra PC, actualizacion y desinstalacion.
 
 ## H6 · Cierre
