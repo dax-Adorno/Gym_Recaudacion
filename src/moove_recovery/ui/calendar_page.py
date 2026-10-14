@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -19,6 +20,7 @@ from moove_recovery.application.service import GymService
 from moove_recovery.domain.errors import DomainError
 from moove_recovery.domain.models import Actor
 from moove_recovery.ui.common import format_money, make_label
+from moove_recovery.ui.responsive_header import ResponsiveHeader
 
 MONTHS = (
     "enero",
@@ -38,6 +40,7 @@ EVENT_CATEGORIES = {
     "Vencimientos": "vencimientos",
     "Cobros": "cobros",
     "Movimientos": "movimientos",
+    "Gastos": "gastos",
 }
 
 
@@ -52,7 +55,15 @@ class CalendarPage(QWidget):
         self.day_buttons: dict[date, QPushButton] = {}
         self.day_button_list: list[QPushButton] = []
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setStyleSheet("QScrollArea { border: 0; }")
+        content = QWidget()
+        self.scroll.setWidget(content)
+        outer.addWidget(self.scroll)
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(26, 24, 26, 24)
         layout.setSpacing(14)
         layout.addWidget(make_label("Calendario", "pageTitle"))
@@ -77,6 +88,8 @@ class CalendarPage(QWidget):
         toolbar.addWidget(self.next_month)
         toolbar.addWidget(self.today_button)
         toolbar.addStretch(1)
+        layout.addLayout(toolbar)
+        category_toolbar = QHBoxLayout()
 
         self.category_group = QButtonGroup(self)
         self.category_group.setExclusive(True)
@@ -85,24 +98,35 @@ class CalendarPage(QWidget):
             "vencimientos": "Ver vencimientos de cuotas y su estado",
             "cobros": "Ver cobros registrados, incluidos los anulados",
             "movimientos": "Ver altas, bajas y reactivaciones de alumnos",
+            "gastos": "Ver gastos por fecha de pago o prevista; incluye anulados identificados",
         }
         for label, category in EVENT_CATEGORIES.items():
             button = QPushButton(label)
             button.setObjectName("calendarActionButton")
             button.setToolTip(category_tooltips[category])
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setFixedSize(132, 40)
             button.setStyleSheet(
-                "QPushButton#calendarActionButton { background: #ffffff; color: #405147; "
-                "border: 1px solid #dce4de; border-radius: 4px; padding: 6px 9px; }"
-                "QPushButton#calendarActionButton:checked { background: #254e3d; "
-                "color: #ffffff; border-color: #254e3d; font-weight: 600; }"
+                "QPushButton#calendarActionButton { background: #f1f5f8; color: #253d4d; "
+                "border: 2px solid #8d9fa9; border-radius: 5px; padding: 6px 8px; font-weight: 600; }"
+                "QPushButton#calendarActionButton:hover { background: #dbeaf4; "
+                "border-color: #3c718d; color: #153b52; }"
+                "QPushButton#calendarActionButton:checked { background: #215a40; "
+                "color: #ffffff; border-color: #123d2b; }"
+                "QPushButton#calendarActionButton:checked:hover { background: #2d7252; "
+                "border-color: #123d2b; }"
+                "QPushButton#calendarActionButton:pressed { background: #163c2c; "
+                "color: #ffffff; border-color: #0e291e; }"
+                "QPushButton#calendarActionButton:focus { border-color: #c17a12; }"
             )
             button.setCheckable(True)
             button.clicked.connect(lambda checked, value=category: self.select_category(value))
             self.category_group.addButton(button)
             self.category_buttons[category] = button
-            toolbar.addWidget(button)
+            category_toolbar.addWidget(button)
         self.category_buttons[self.category].setChecked(True)
-        layout.addLayout(toolbar)
+        category_toolbar.addStretch(1)
+        layout.addLayout(category_toolbar)
 
         self.calendar_grid = QGridLayout()
         self.calendar_grid.setSpacing(4)
@@ -118,9 +142,13 @@ class CalendarPage(QWidget):
             button.setObjectName("calendarDay")
             button.setStyleSheet(
                 "QPushButton#calendarDay { text-align: left; padding: 5px; "
-                "background: #f6f8f6; border: 1px solid #dbe2dd; border-radius: 3px; }"
+                "background: #f6f8f6; color: #243b2e; border: 2px solid #aabbb1; border-radius: 3px; }"
                 "QPushButton#calendarDay:checked { background: #e3f1e9; "
-                "border: 2px solid #3a7959; }"
+                "color: #243b2e; border: 2px solid #3a7959; }"
+                "QPushButton#calendarDay:hover { background: #dbeaf4; color: #243b2e; border-color: #3c718d; }"
+                "QPushButton#calendarDay:checked:hover { background: #c9e5d6; color: #243b2e; }"
+                "QPushButton#calendarDay:pressed { background: #b5d6c3; color: #243b2e; border-color: #215a40; }"
+                "QPushButton#calendarDay:focus { color: #243b2e; border-color: #b67514; }"
                 "QPushButton#calendarDay:disabled { color: #a0a8a3; }"
             )
             button.setCheckable(True)
@@ -136,11 +164,20 @@ class CalendarPage(QWidget):
         self.empty_events = make_label("Sin eventos para esta fecha.", "muted")
         layout.addWidget(self.empty_events)
         self.events_table = QTableWidget(0, 3)
+        self.events_table.setMinimumHeight(150)
+        self.events_table.setHorizontalHeader(ResponsiveHeader(self.events_table))
         self.events_table.setHorizontalHeaderLabels(["ALUMNO / CONCEPTO", "DETALLE", "IMPORTE"])
         self.events_table.verticalHeader().setVisible(False)
         self.events_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.events_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.events_table.horizontalHeader().setStretchLastSection(True)
+        self.events_table.horizontalHeader().setMinimumSectionSize(95)
+        for column, width in enumerate((260, 480, 160)):
+            self.events_table.setColumnWidth(column, width)
+        self.events_table.setWordWrap(True)
+        self.events_table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.events_table.horizontalHeader().sectionResized.connect(
+            self.events_table.resizeRowsToContents
+        )
         layout.addWidget(self.events_table, 1)
         self.refresh()
 
@@ -182,6 +219,7 @@ class CalendarPage(QWidget):
         if category not in EVENT_CATEGORIES.values():
             return
         self.category = category
+        self.category_buttons[category].setChecked(True)
         self.refresh()
 
     def select_day(self, index: int) -> None:
@@ -206,6 +244,7 @@ class CalendarPage(QWidget):
             )
             for column, value in enumerate(values):
                 self.events_table.setItem(row, column, QTableWidgetItem(value))
+        self.events_table.resizeRowsToContents()
 
     def shift_month(self, delta: int) -> None:
         month_index = self.selected_date.year * 12 + self.selected_date.month - 1 + delta

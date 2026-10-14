@@ -113,14 +113,14 @@ def test_delete_student_requires_confirmation_and_removes_only_selection(
     assert page.selected_id == remaining
 
 
-def test_calendar_page_has_three_event_actions_and_month_navigation(qtbot, environment) -> None:
+def test_calendar_page_has_four_event_actions_and_month_navigation(qtbot, environment) -> None:
     add_student(environment)
     service: GymService = environment["service"]
     service.generate_missing_dues()
     page = CalendarPage(service, environment["owner"])
     qtbot.addWidget(page)
 
-    assert set(page.category_buttons) == {"vencimientos", "cobros", "movimientos"}
+    assert set(page.category_buttons) == {"vencimientos", "cobros", "movimientos", "gastos"}
     assert len(page.day_button_list) == 42
     page.day_buttons[date(2026, 10, 10)].click()
     assert page.events_table.rowCount() == 1

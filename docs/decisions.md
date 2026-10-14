@@ -53,6 +53,15 @@
 - Las cuentas eliminadas se ocultan por defecto y se pueden consultar con "Mostrar eliminados". Su nombre de usuario permanece reservado para evitar confundir autorías históricas.
 - Se impide eliminar la cuenta del dueño y la sesión actual. Editar la propia cuenta fuerza un nuevo inicio de sesión.
 
+## Gastos
+
+- Confirmado: solo el dueno ve y administra gastos pagados y pendientes.
+- Pagados descuentan del resultado en su fecha real de pago; pendientes actuales no se descuentan.
+- Pendientes no se limitan al mes seleccionado para no ocultar obligaciones anteriores.
+- Se paga el mismo registro sin duplicarlo. Edicion y anulacion con motivo quedan auditadas.
+- El resultado es cobros validos menos gastos pagados, no una utilidad fiscal ni saldo bancario.
+- Esquema 2 con respaldo previo y compatibilidad de restauracion para copias de esquema 1.
+
 ## Distribución
 
 PySide6 se distribuye bajo LGPLv3/GPLv3 o licencia comercial de Qt. Antes de crear un instalador se revisarán las condiciones de distribución de Qt y las licencias de las dependencias incluidas.
